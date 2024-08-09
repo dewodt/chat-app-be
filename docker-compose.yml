@@ -1,0 +1,70 @@
+services:
+  # PostgreSQL database
+  chat-app-db:
+    container_name: chat-app-db
+    image: postgres:14
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    ports:
+      - '5434:${DB_PORT}' # Use port 5434 to avoid conflict with local PostgreSQL instance
+    volumes:
+      - ./db-data:/var/lib/postgresql/data
+    networks:
+      - chat-app-network
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${DB_USERNAME} -d ${DB_NAME} -h ${DB_HOST} -p ${DB_PORT}',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend dev server
+  chat-app-be-dev:
+    container_name: chat-app-be-dev
+    build:
+      context: .
+      target: development
+    env_file:
+      - .env
+    ports:
+      - '3000:${SERVER_PORT}'
+    volumes:
+      - ./:/app
+    networks:
+      - chat-app-network
+    depends_on:
+      chat-app-db:
+        condition: service_healthy
+    command: npm run start:dev
+
+  # Backend prod server
+  chat-app-be-prod:
+    container_name: chat-app-be-prod
+    build:
+      context: .
+      target: production
+    env_file:
+      - .env
+    ports:
+      - '3000:${SERVER_PORT}'
+    networks:
+      - chat-app-network
+    depends_on:
+      chat-app-db:
+        condition: service_healthy
+    command: npm run start:prod
+
+volumes:
+  db-data:
+
+networks:
+  chat-app-network:
+    external: true # Custom network
+    driver: bridge # Default bridge network
