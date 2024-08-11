@@ -10,6 +10,14 @@ import { ConfigService as NestConfig, Path, PathValue } from '@nestjs/config';
  */
 @Injectable()
 export class ConfigService<T = Config> extends NestConfig<T> {
+  /**
+   * get method
+   *
+   * Automatically infer type in the get method.
+   *
+   * @param path
+   * @returns environment variable value
+   */
   override get<P extends Path<T>>(path: P): PathValue<T, P> {
     const value = super.get(path, { infer: true });
 
