@@ -13,6 +13,7 @@ run-app-prod:
 reset:
 	docker compose down -v
 	sudo rm -rf ./db-data
+	sudo rm -rf ./dist
 
 stop:
 	docker compose down
