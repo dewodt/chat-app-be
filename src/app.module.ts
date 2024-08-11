@@ -1,16 +1,22 @@
 import { AuthModule } from './auth/auth.module';
 import { ChatsModule } from './chats/chats.module';
-import { ConfigModule, ConfigService } from './config';
+import { CommonModule, ExceptionsFilter } from './common';
+import { ConfigModule, ConfigService, loggerOptions } from './config';
 import { UsersModule } from './users/users.module';
-import { Module } from '@nestjs/common';
+import { Module, ValidationPipe } from '@nestjs/common';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
 
 @Module({
   imports: [
-    // Custom Config Wrapper
+    // Global Nest ConfigModule Wrapper
     ConfigModule,
-
-    // TypeORM Config
+    // Global Common Module
+    CommonModule,
+    // Logger (nestjs-pino) Module
+    LoggerModule.forRoot(loggerOptions),
+    // TypeORM Config Module
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
@@ -24,11 +30,30 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
       }),
     }),
-
-    // Other Modules
+    // Other (Non global) Modules
     AuthModule,
     UsersModule,
     ChatsModule,
+  ],
+  providers: [
+    // Global exception filter
+    {
+      provide: APP_FILTER,
+      useClass: ExceptionsFilter,
+    },
+    // Global pipe
+    {
+      provide: APP_FILTER,
+      useValue: new ValidationPipe({
+        transform: true,
+        whitelist: true,
+      }),
+    },
+    // Global error logger with interceptor (nestjs-pino)
+    {
+      provide: APP_INTERCEPTOR,
+      useValue: new LoggerErrorInterceptor(),
+    },
   ],
 })
 export class AppModule {}
