@@ -1,7 +1,17 @@
 import { AuthService } from './auth.service';
 import { SignInDto, SignUpDto } from './dto';
-import { Body, Controller, HttpCode, Post, Res } from '@nestjs/common';
+import { JwtAuthGuard } from './jwt';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { Response } from 'express';
+import { ReqUser } from 'src/common';
 import { SuccessDto } from 'src/common/dto';
 import { ConfigService } from 'src/config';
 
@@ -41,5 +51,12 @@ export class AuthController {
 
     // Return response
     return new SuccessDto('Sign up successful');
+  }
+
+  @Get('session')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  async getSession(@ReqUser() reqUser: ReqUser) {
+    return new SuccessDto('Session active', reqUser);
   }
 }

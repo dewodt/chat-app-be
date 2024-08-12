@@ -16,6 +16,6 @@ import { ConfigService } from 'src/config';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtAuthGuard, JwtStrategy],
-  exports: [AuthService, JwtAuthGuard],
+  exports: [JwtAuthGuard],
 })
 export class AuthModule {}
