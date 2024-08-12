@@ -2,6 +2,7 @@ import { AuthService } from './auth.service';
 import { SignInDto, SignUpDto } from './dto';
 import { Body, Controller, HttpCode, Post, Res } from '@nestjs/common';
 import { Response } from 'express';
+import { SuccessDto } from 'src/common/dto';
 import { ConfigService } from 'src/config';
 
 @Controller('auth')
@@ -29,7 +30,7 @@ export class AuthController {
     });
 
     // Return response
-    return { message: 'Sign in successful' };
+    return new SuccessDto('Sign in successful');
   }
 
   @Post('sign-up')
@@ -39,6 +40,6 @@ export class AuthController {
     await this.authService.signUp(body);
 
     // Return response
-    return { message: 'Sign up successful' };
+    return new SuccessDto('Sign up successful');
   }
 }

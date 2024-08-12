@@ -2,10 +2,12 @@ import { SignInDto, SignUpDto } from './dto';
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcrypt';
+import { ErrorDto } from 'src/common/dto';
 import { User } from 'src/users/entities';
 import { DataSource } from 'typeorm';
 import { QueryFailedError } from 'typeorm';
@@ -31,14 +33,14 @@ export class AuthService {
 
     // Check if user exists
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(new ErrorDto('Invalid credentials'));
     }
 
     // Check if password is correct
     const isPasswordCorrect = await compare(body.password, user.password);
 
     if (!isPasswordCorrect) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(new ErrorDto('Invalid credentials'));
     }
 
     // Generate JWT token
@@ -78,9 +80,17 @@ export class AuthService {
         error instanceof QueryFailedError &&
         error.driverError.code === '23505'
       ) {
-        throw new BadRequestException('Username already exists');
+        // Unique constraint violation
+        throw new BadRequestException(
+          new ErrorDto('Validation failed', [
+            { field: 'username', message: 'Username already exists' },
+          ]),
+        );
       } else {
-        throw error;
+        // Other error
+        throw new InternalServerErrorException(
+          new ErrorDto('An error occurred while signing up'),
+        );
       }
     }
   }
