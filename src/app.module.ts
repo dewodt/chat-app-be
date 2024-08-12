@@ -1,10 +1,10 @@
 import { AuthModule } from './auth/auth.module';
 import { ChatsModule } from './chats/chats.module';
-import { CommonModule, ExceptionsFilter } from './common';
+import { CommonModule } from './common';
 import { ConfigModule, ConfigService, loggerOptions } from './config';
 import { UsersModule } from './users/users.module';
 import { Module, ValidationPipe } from '@nestjs/common';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
 
@@ -36,14 +36,9 @@ import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
     ChatsModule,
   ],
   providers: [
-    // Global exception filter
-    {
-      provide: APP_FILTER,
-      useClass: ExceptionsFilter,
-    },
     // Global pipe
     {
-      provide: APP_FILTER,
+      provide: APP_PIPE,
       useValue: new ValidationPipe({
         transform: true,
         whitelist: true,
@@ -52,7 +47,7 @@ import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
     // Global error logger with interceptor (nestjs-pino)
     {
       provide: APP_INTERCEPTOR,
-      useValue: new LoggerErrorInterceptor(),
+      useClass: LoggerErrorInterceptor,
     },
   ],
 })
