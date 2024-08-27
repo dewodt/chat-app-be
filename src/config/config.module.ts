@@ -1,22 +1,21 @@
-import { loadConfig } from './config.load';
-import { ConfigService } from './config.service';
-import { validateConfig } from './config.validation';
+import { validateConfig, appConfig } from './app';
+import { CustomConfigService } from './config.service';
 import { Global, Module } from '@nestjs/common';
-import { ConfigModule as NestConfigModule } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 
 @Global()
 @Module({
   imports: [
-    NestConfigModule.forRoot({
+    ConfigModule.forRoot({
       envFilePath: '.env',
       expandVariables: true,
       isGlobal: true,
       cache: true,
-      load: [loadConfig],
+      load: [appConfig],
       validate: validateConfig,
     }),
   ],
-  providers: [ConfigService],
-  exports: [ConfigService],
+  providers: [CustomConfigService],
+  exports: [CustomConfigService],
 })
-export class ConfigModule {}
+export class CustomConfigModule {}

@@ -2,6 +2,8 @@
 FROM node:20 as development
 WORKDIR /app
 COPY package*.json ./
+# install nest cli
+RUN npm install -g @nestjs/cli
 RUN npm ci
 COPY ./ ./
 
@@ -9,6 +11,8 @@ COPY ./ ./
 FROM node:20 as production
 WORKDIR /app
 COPY package*.json ./
+# install nest cli
+RUN npm install -g @nestjs/cli
 RUN npm ci
 COPY ./ ./
 ENV NODE_ENV=production

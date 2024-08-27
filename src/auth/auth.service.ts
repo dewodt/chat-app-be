@@ -1,4 +1,5 @@
-import { SignInDto, SignUpDto } from './dto';
+import { SignInRequestDto, SignUpRequestDto } from './dto';
+import { JwtPayload, UserPayload } from './interfaces';
 import {
   BadRequestException,
   Injectable,
@@ -6,11 +7,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { hash, compare } from 'bcrypt';
-import { ErrorDto } from 'src/common/dto';
+import { compare, hash } from 'bcrypt';
+import { ResponseFactory } from 'src/common/dto';
 import { User } from 'src/users/entities';
 import { DataSource } from 'typeorm';
-import { QueryFailedError } from 'typeorm';
 
 @Injectable()
 export class AuthService {
@@ -20,78 +20,121 @@ export class AuthService {
   ) {}
 
   /**
-   * Sign in user
+   * Validate user
    *
-   * @param body - Sign in data
+   * @param usernameOrEmail
+   * @param password
+   * @returns
    */
-  async signIn(body: SignInDto) {
+  async validateUser(username: string, password: string): Promise<User | null> {
     // Find user by username
     const userRepository = this.dataSource.getRepository(User);
     const user = await userRepository.findOne({
-      where: { username: body.username },
+      where: [{ username: username }],
     });
 
     // Check if user exists
     if (!user) {
-      throw new UnauthorizedException(new ErrorDto('Invalid credentials'));
+      return null;
     }
 
     // Check if password is correct
-    const isPasswordCorrect = await compare(body.password, user.password);
-
+    const isPasswordCorrect = await compare(password, user.password);
     if (!isPasswordCorrect) {
-      throw new UnauthorizedException(new ErrorDto('Invalid credentials'));
+      return null;
     }
 
-    // Generate JWT token
-    const jwtToken = await this.jwtService.signAsync(
-      {
-        sub: user.id,
-        username: user.username,
-      },
-      {
-        expiresIn: '1d',
-      },
-    );
-
-    return jwtToken;
+    return user;
   }
 
   /**
-   * Sign up user
+   * Sign UserPayload
    *
-   * @param body - Sign up data
-   * @returns void
+   * @param userPayload
+   * @returns
    */
-  async signUp(body: SignUpDto) {
-    // Create new user
-    const userRepository = this.dataSource.getRepository(User);
+  async signJwt(userPayload: UserPayload): Promise<string> {
+    const jwtPayload: JwtPayload = {
+      sub: userPayload.userId,
+      username: userPayload.username,
+    };
 
-    const hashedPassword = await hash(body.password, 10);
-
+    // Sign JWT
+    let token: string | null = null;
     try {
-      await userRepository.insert({
-        name: body.name,
-        username: body.username,
-        password: hashedPassword,
+      token = await this.jwtService.signAsync(jwtPayload, {
+        expiresIn: '1d',
       });
     } catch (error) {
-      if (
-        error instanceof QueryFailedError &&
-        error.driverError.code === '23505'
-      ) {
-        // Unique constraint violation
-        throw new BadRequestException(
-          new ErrorDto('Validation failed', [
-            { field: 'username', message: 'Username already exists' },
-          ]),
-        );
-      } else {
-        // Other error
-        throw new InternalServerErrorException(
-          new ErrorDto('An error occurred while signing up'),
-        );
-      }
+      throw new InternalServerErrorException(
+        ResponseFactory.createErrorResponse('An error occurred'),
+      );
     }
+
+    return token;
+  }
+
+  async signIn(body: SignInRequestDto) {
+    // Validate user
+    const user = await this.validateUser(body.username, body.password);
+
+    // Check if user exists
+    if (!user) {
+      throw new UnauthorizedException(
+        ResponseFactory.createErrorResponse('Invalid credentials'),
+      );
+    }
+
+    // Sign JWT
+    const userPayload: UserPayload = {
+      userId: user.id,
+      username: user.username,
+    };
+    const token = await this.signJwt(userPayload);
+
+    return {
+      token,
+      user,
+    };
+  }
+
+  async signUp(body: SignUpRequestDto): Promise<User> {
+    // Check if username exists
+    const userRepository = this.dataSource.getRepository(User);
+    const user = await userRepository.findOne({
+      where: [{ username: body.username }],
+    });
+
+    if (user) {
+      throw new BadRequestException(
+        ResponseFactory.createErrorResponse('Username already exists', [
+          {
+            field: 'username',
+            message: 'Username already exists',
+          },
+        ]),
+      );
+    }
+
+    // Create user
+    const hashedPassword = await hash(body.password, 10);
+
+    let insertedUser: User | null = null;
+    const newUser = userRepository.create({
+      username: body.username,
+      name: body.name,
+      password: hashedPassword,
+    });
+
+    try {
+      insertedUser = await userRepository.save(newUser);
+    } catch (error) {
+      // Internal error
+      throw new InternalServerErrorException(
+        ResponseFactory.createErrorResponse('An error occurred'),
+      );
+    }
+
+    return insertedUser;
   }
 }

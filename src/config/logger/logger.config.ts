@@ -6,7 +6,7 @@ import type { ReqId } from 'pino-http';
 
 const passUrl = new Set(['/health', '/graphql']);
 
-export const loggerOptions: Params = {
+export const loggerConfig: Params = {
   pinoHttp: [
     {
       // https://getpino.io/#/docs/api?id=timestamp-boolean-function

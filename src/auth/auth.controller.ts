@@ -1,6 +1,7 @@
 import { AuthService } from './auth.service';
-import { SignInDto, SignUpDto } from './dto';
-import { JwtAuthGuard } from './jwt';
+import { SessionResponseDto, SignInRequestDto, SignUpRequestDto } from './dto';
+import { JwtAuthGuard } from './guards';
+import { UserPayload } from './interfaces';
 import {
   Body,
   Controller,
@@ -11,52 +12,78 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { ReqUser } from 'src/common';
-import { SuccessDto } from 'src/common/dto';
-import { ConfigService } from 'src/config';
+import { ReqUser } from 'src/common/decorators';
+import { Public } from 'src/common/decorators/public.decorator';
+import { ResponseFactory } from 'src/common/dto';
 
 @Controller('auth')
+@UseGuards(JwtAuthGuard)
 export class AuthController {
-  constructor(
-    private configService: ConfigService,
-    private authService: AuthService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Post('sign-in')
+  @Public()
   @HttpCode(200)
   async signIn(
-    @Body() body: SignInDto,
-    @Res({ passthrough: true }) res: Response,
+    @Body() body: SignInRequestDto,
+    @Res({ passthrough: true }) respose: Response,
   ) {
-    // Sign in user & get generated JWT token
-    const jwtToken = await this.authService.signIn(body);
+    // Call login service
+    const { token, user } = await this.authService.signIn(body);
 
-    // Add cookie to response
-    res.cookie('chat-app-auth', jwtToken, {
-      maxAge: 1000 * 60 * 60 * 24, // 1 day
+    // Map result to response
+    const responseData: SessionResponseDto = {
+      userId: user.id,
+      username: user.username,
+    };
+
+    // Set cookie
+    respose.cookie('chat-app-auth', token, {
+      maxAge: 1 * 24 * 60 * 60 * 1000, // 1 day
       httpOnly: true,
-      secure: this.configService.get('env') === 'production',
+      secure: true,
       sameSite: 'strict',
     });
 
-    // Return response
-    return new SuccessDto('Sign in successful');
+    return ResponseFactory.createSuccessResponse(
+      'Sign in success',
+      responseData,
+    );
+  }
+
+  @Get('sign-out')
+  @Public()
+  @HttpCode(200)
+  async logout(@Res({ passthrough: true }) respose: Response) {
+    // Clear cookie
+    respose.clearCookie('chat-app-auth');
+
+    return ResponseFactory.createSuccessResponse('Sign out success');
   }
 
   @Post('sign-up')
+  @Public()
   @HttpCode(201)
-  async signUp(@Body() body: SignUpDto) {
-    // Sign up user
+  async register(@Body() body: SignUpRequestDto) {
+    // Call register service
     await this.authService.signUp(body);
 
-    // Return response
-    return new SuccessDto('Sign up successful');
+    return ResponseFactory.createSuccessResponse('Sign up success');
   }
 
   @Get('session')
   @HttpCode(200)
-  @UseGuards(JwtAuthGuard)
-  async getSession(@ReqUser() reqUser: ReqUser) {
-    return new SuccessDto('Session active', reqUser);
+  async self(@ReqUser() user: UserPayload) {
+    // Map response
+    const responseData: SessionResponseDto = {
+      userId: user.userId,
+      username: user.username,
+    };
+
+    // Return response
+    return ResponseFactory.createSuccessResponse(
+      'Get session success',
+      responseData,
+    );
   }
 }

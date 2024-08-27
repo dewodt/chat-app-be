@@ -1,7 +1,8 @@
 import { AuthModule } from './auth/auth.module';
 import { ChatsModule } from './chats/chats.module';
 import { CommonModule } from './common';
-import { ConfigModule, ConfigService, loggerOptions } from './config';
+import { CustomConfigModule, CustomConfigService } from './config';
+import { loggerConfig } from './config/logger';
 import { UsersModule } from './users/users.module';
 import { Module, ValidationPipe } from '@nestjs/common';
 import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
@@ -11,15 +12,15 @@ import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
 @Module({
   imports: [
     // Global Nest ConfigModule Wrapper
-    ConfigModule,
+    CustomConfigModule,
     // Global Common Module
     CommonModule,
     // Logger (nestjs-pino) Module
-    LoggerModule.forRoot(loggerOptions),
+    LoggerModule.forRoot(loggerConfig),
     // TypeORM Config Module
     TypeOrmModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
+      inject: [CustomConfigService],
+      useFactory: async (configService: CustomConfigService) => ({
         type: 'postgres',
         host: configService.get('database.host'),
         port: configService.get('database.port'),
