@@ -1,23 +1,13 @@
 import { AuthService } from './auth.service';
 import { SessionResponseDto, SignInRequestDto, SignUpRequestDto } from './dto';
-import { JwtAuthGuard } from './guards';
 import { UserPayload } from './interfaces';
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Post,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ReqUser } from 'src/common/decorators';
 import { Public } from 'src/common/decorators/public.decorator';
 import { ResponseFactory } from 'src/common/dto';
 
 @Controller('auth')
-@UseGuards(JwtAuthGuard)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -52,7 +42,6 @@ export class AuthController {
   }
 
   @Get('sign-out')
-  @Public()
   @HttpCode(200)
   async logout(@Res({ passthrough: true }) respose: Response) {
     // Clear cookie
