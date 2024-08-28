@@ -4,6 +4,9 @@ init-network:
 run-db:
 	docker compose up --build chat-app-db
 
+run-seeder:
+	docker compose up --build chat-app-seeder-dev
+
 run-app-dev:
 	docker compose up --build chat-app-be-dev
 

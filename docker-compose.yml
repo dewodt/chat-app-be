@@ -44,6 +44,21 @@ services:
         condition: service_healthy
     command: npm run start:dev
 
+  # Seeder dev
+  chat-app-seeder-dev:
+    container_name: chat-app-seeder-dev
+    build:
+      context: .
+      target: production # prod build
+    env_file:
+      - .env
+    networks:
+      - chat-app-network
+    depends_on:
+      chat-app-db:
+        condition: service_healthy
+    command: npm run seed:dev
+
   # Backend prod server
   chat-app-be-prod:
     container_name: chat-app-be-prod
