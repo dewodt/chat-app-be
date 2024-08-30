@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -15,6 +16,7 @@ export class User {
   id: string;
 
   @Column({ unique: true })
+  @Index()
   username: string;
 
   @Column()

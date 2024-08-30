@@ -3,6 +3,7 @@ import { User } from 'src/users/entities';
 import {
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -11,6 +12,7 @@ import {
 } from 'typeorm';
 
 @Entity('private_chats')
+@Index(['user1', 'user2'], { unique: true })
 export class PrivateChat {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -38,4 +40,6 @@ export class PrivateChat {
     (privateMessage) => privateMessage.privateChat,
   )
   messages: PrivateMessage[];
+
+  latestMessage: PrivateMessage;
 }

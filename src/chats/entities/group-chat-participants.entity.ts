@@ -5,13 +5,16 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
   UpdateDateColumn,
 } from 'typeorm';
 
 @Entity('group_chat_participants')
+@Unique(['user', 'groupChat'])
 export class GroupChatParticipant {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -35,9 +38,11 @@ export class GroupChatParticipant {
 
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'user_id' })
+  @Index()
   user: User;
 
   @ManyToOne(() => GroupChat, (groupChat) => groupChat.id)
   @JoinColumn({ name: 'group_chat_id' })
+  @Index()
   groupChat: GroupChat;
 }

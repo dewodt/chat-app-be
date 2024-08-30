@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -22,6 +23,7 @@ export class PrivateMessage {
   @CreateDateColumn({
     name: 'created_at',
   })
+  @Index()
   createdAt: Date;
 
   @UpdateDateColumn({
@@ -36,9 +38,11 @@ export class PrivateMessage {
 
   @ManyToOne(() => PrivateChat, (privateChat) => privateChat.id)
   @JoinColumn({ name: 'private_chat_id' })
+  @Index()
   privateChat: PrivateChat;
 
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'sender_id' })
+  @Index()
   sender: User;
 }

@@ -53,10 +53,21 @@ export class SeederService {
     });
     generatedUsers.push(customUser);
 
-    // For each user, generate 10-20 private chats
+    // For each user, generate 10-15 private chats
     for (const user of generatedUsers) {
       const usersWithoutSelf = generatedUsers.filter((u) => u.id !== user.id);
-      const randomPrivateChats = faker.number.int({ min: 10, max: 15 });
+      generatedPrivateChats.forEach((pc) => {
+        if (pc.user1.id === user.id || pc.user2.id === user.id) {
+          const idx = usersWithoutSelf.findIndex(
+            (val) => val.id === pc.user1.id || val.id === pc.user2.id,
+          );
+          usersWithoutSelf.splice(idx, 1);
+        }
+      });
+      const randomPrivateChats = faker.number.int({
+        min: 0,
+        max: usersWithoutSelf.length - 1,
+      });
       const randomUsers = faker.helpers.arrayElements(
         usersWithoutSelf,
         randomPrivateChats,
