@@ -1,14 +1,8 @@
 import { faker } from '@faker-js/faker';
 import { Injectable } from '@nestjs/common';
 import { hash } from 'bcrypt';
-import {
-  GroupChat,
-  GroupChatParticipant,
-  GroupMessage,
-  GroupParticipantRole,
-  PrivateChat,
-  PrivateMessage,
-} from 'src/chats/entities';
+import { addHours } from 'date-fns';
+import { PrivateChat, PrivateMessage } from 'src/chats/entities';
 import { User } from 'src/users/entities';
 import { DataSource } from 'typeorm';
 
@@ -24,9 +18,6 @@ export class SeederService {
     const generatedUsers: User[] = [];
     const generatedPrivateChats: PrivateChat[] = [];
     const generatedPrivateMessages: PrivateMessage[] = [];
-    const generatedGroupChatParticipants: GroupChatParticipant[] = [];
-    const generatedGroupChats: GroupChat[] = [];
-    const generatedGroupMessages: GroupMessage[] = [];
 
     // Generate 30 users
     const password = await hash('password', 10);
@@ -85,69 +76,38 @@ export class SeederService {
 
         // For each private chat, generate 20-30 messages
         const randomMessages = faker.number.int({ min: 20, max: 30 });
+        const isAllRead = faker.datatype.boolean();
+        const determinedMessageStatusCount = 5;
+        const lastMassgeSender = faker.helpers.arrayElement([user, randomUser]);
+
         for (let i = 0; i < randomMessages; i++) {
+          const createdAt = addHours(new Date(), i * -6);
+
           const privateMessage = queryRunner.manager.create(PrivateMessage, {
             id: faker.string.uuid(),
             privateChat,
-            sender: faker.helpers.arrayElement([user, randomUser]),
+            // isRead: true,
+            // sender: faker.helpers.arrayElement([user, randomUser]),
             content: faker.lorem.sentence(),
-            createdAt: faker.date.recent({ days: 30 }),
+            createdAt: createdAt,
             deletedAt: faker.datatype.boolean({ probability: 0.1 })
-              ? faker.date.recent({ days: 30 })
+              ? addHours(createdAt, 1)
               : null,
           });
 
-          generatedPrivateMessages.push(privateMessage);
+          if (i >= determinedMessageStatusCount || isAllRead) {
+            privateMessage.isRead = true;
+            privateMessage.sender = faker.helpers.arrayElement([
+              user,
+              randomUser,
+            ]);
+          } else {
+            privateMessage.isRead = false;
+            privateMessage.sender = lastMassgeSender;
+          }
+
+          generatedPrivateMessages.unshift(privateMessage);
         }
-      }
-    }
-
-    // Generate 10 group chats
-    for (let i = 0; i < 10; i++) {
-      const groupChat = queryRunner.manager.create(GroupChat, {
-        id: faker.string.uuid(),
-        title: faker.lorem.words(2),
-        avatarUrl: faker.datatype.boolean() ? faker.image.avatar() : null,
-        about: faker.datatype.boolean() ? faker.lorem.sentence() : null,
-      });
-
-      generatedGroupChats.push(groupChat);
-
-      // For each of the group chat, assign 4-6 random users
-      const randomUsers = faker.helpers.arrayElements(generatedUsers, 6);
-      let i = 0;
-      for (const randomUser of randomUsers) {
-        const groupChatParticipant = queryRunner.manager.create(
-          GroupChatParticipant,
-          {
-            id: faker.string.uuid(),
-            groupChat,
-            user: randomUser,
-            role:
-              i < 2 ? GroupParticipantRole.ADMIN : GroupParticipantRole.MEMBER,
-          },
-        );
-
-        generatedGroupChatParticipants.push(groupChatParticipant);
-
-        i++;
-      }
-
-      // Generate group messages. for each group chat, generate 20-30 messages
-      const randomMessages = faker.number.int({ min: 20, max: 30 });
-      for (let i = 0; i < randomMessages; i++) {
-        const groupMessage = queryRunner.manager.create(GroupMessage, {
-          id: faker.string.uuid(),
-          groupChat,
-          sender: faker.helpers.arrayElement(randomUsers),
-          content: faker.lorem.sentence(),
-          createdAt: faker.date.recent({ days: 30 }),
-          deletedAt: faker.datatype.boolean({ probability: 0.1 })
-            ? faker.date.recent({ days: 30 })
-            : null,
-        });
-
-        generatedGroupMessages.push(groupMessage);
       }
     }
 
@@ -155,22 +115,17 @@ export class SeederService {
     try {
       await queryRunner.startTransaction();
 
-      await queryRunner.manager.delete(GroupMessage, {});
-      await queryRunner.manager.delete(GroupChatParticipant, {});
-      await queryRunner.manager.delete(GroupChat, {});
       await queryRunner.manager.delete(PrivateMessage, {});
       await queryRunner.manager.delete(PrivateChat, {});
       await queryRunner.manager.delete(User, {});
 
-      await queryRunner.manager.save(User, generatedUsers);
-      await queryRunner.manager.save(PrivateChat, generatedPrivateChats);
-      await queryRunner.manager.save(PrivateMessage, generatedPrivateMessages);
-      await queryRunner.manager.save(GroupChat, generatedGroupChats);
-      await queryRunner.manager.save(
-        GroupChatParticipant,
-        generatedGroupChatParticipants,
-      );
-      await queryRunner.manager.save(GroupMessage, generatedGroupMessages);
+      await queryRunner.manager.save(User, generatedUsers, { chunk: 100 });
+      await queryRunner.manager.save(PrivateChat, generatedPrivateChats, {
+        chunk: 100,
+      });
+      await queryRunner.manager.save(PrivateMessage, generatedPrivateMessages, {
+        chunk: 100,
+      });
 
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -188,9 +143,6 @@ export class SeederService {
     try {
       await queryRunner.startTransaction();
 
-      await queryRunner.manager.delete(GroupMessage, {});
-      await queryRunner.manager.delete(GroupChatParticipant, {});
-      await queryRunner.manager.delete(GroupChat, {});
       await queryRunner.manager.delete(PrivateMessage, {});
       await queryRunner.manager.delete(PrivateChat, {});
       await queryRunner.manager.delete(User, {});

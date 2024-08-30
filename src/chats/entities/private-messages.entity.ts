@@ -20,6 +20,10 @@ export class PrivateMessage {
   @Column('text')
   content: string;
 
+  @Column({ name: 'is_read', default: false })
+  @Index()
+  isRead: boolean;
+
   @CreateDateColumn({
     name: 'created_at',
   })

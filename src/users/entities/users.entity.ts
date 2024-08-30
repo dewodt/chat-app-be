@@ -1,4 +1,3 @@
-import { GroupChatParticipant } from 'src/chats/entities/group-chat-participants.entity';
 import { PrivateChat } from 'src/chats/entities/private-chats.entity';
 import {
   Column,
@@ -48,12 +47,6 @@ export class User {
     name: 'updated_at',
   })
   updatedAt: Date;
-
-  @OneToMany(
-    () => GroupChatParticipant,
-    (groupChatParticipant) => groupChatParticipant.user,
-  )
-  groupChatParticipants: GroupChatParticipant[];
 
   @OneToMany(() => PrivateChat, (privateChat) => privateChat.user1)
   privateChats1: PrivateChat[];

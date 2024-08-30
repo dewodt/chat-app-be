@@ -41,5 +41,8 @@ export class PrivateChat {
   )
   messages: PrivateMessage[];
 
+  // Aditional field
   latestMessage: PrivateMessage;
+  toUser: User; // The user that is not the current user
+  unreadCount: number;
 }
