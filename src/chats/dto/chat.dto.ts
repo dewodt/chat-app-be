@@ -16,8 +16,9 @@ export interface ChatInbox {
 export interface Message {
   messageId: string;
   content: string;
+  editedAt: Date | null;
+  readAt: Date | null;
   createdAt: Date;
-  updatedAt: Date;
   deletedAt: Date | null;
 }
 
@@ -42,7 +43,8 @@ export class ChatResponseFactory {
       messageId: message.id,
       content: message.content,
       createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
+      editedAt: message.editedAt,
+      readAt: message.readAt,
       deletedAt: message.deletedAt,
     };
   }

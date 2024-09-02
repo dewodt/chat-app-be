@@ -5,6 +5,7 @@ import {
   EditMessageRequestDto,
   JoinChatRequestDto,
   SendMessageRequestDto,
+  SendReadReceiptRequestDto,
 } from './dto';
 import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
 import {
@@ -145,6 +146,8 @@ export class ChatsGateway implements NestGateway {
 
     // Send message to other users except current socket id
     socket.to(body.chatId).emit('newMessage', messageResponse);
+
+    return ResponseFactory.createSuccessResponse('Message sent');
   }
 
   @SubscribeMessage('handleEditMessage')
@@ -163,6 +166,8 @@ export class ChatsGateway implements NestGateway {
     socket
       .to(editedMessage.privateChat.id)
       .emit('editMessage', messageResponse);
+
+    return ResponseFactory.createSuccessResponse('Message edited');
   }
 
   @SubscribeMessage('sendDeleteMessage')
@@ -184,60 +189,66 @@ export class ChatsGateway implements NestGateway {
     socket
       .to(deletedMessage.privateChat.id)
       .emit('deleteMessage', messageResponse);
+
+    return ResponseFactory.createSuccessResponse('Message deleted');
   }
 
-  // @SubscribeMessage('sendTyping')
-  // async handleSendTyping(
-  //   @ConnectedSocket() socket: Socket,
-  //   @MessageBody() body: any,
-  //   @WsReqUser() reqUser: UserPayload,
-  // ) {
-  //   // Check if user is authorized
-  //   const { isAuthorized, privateChat } =
-  //     await this.chatService.canUserAccessPrivateChat(
-  //       reqUser.userId,
-  //       body.chatId,
-  //     );
-  //   if (!isAuthorized) {
-  //     throw new WsException('Unauthorized access');
-  //   }
-  //   // Send typing
-  //   socket.to(body.chatId).emit('typing');
-  //   return null; // Ack
-  // }
-  // @SubscribeMessage('sendStopTyping')
-  // async handleSendStopTyping(
-  //   @ConnectedSocket() socket: Socket,
-  //   @MessageBody() body: any,
-  //   @WsReqUser() reqUser: UserPayload,
-  // ) {
-  //   // Check if user is authorized
-  //   const { isAuthorized, privateChat } =
-  //     await this.chatService.canUserAccessPrivateChat(
-  //       reqUser.userId,
-  //       body.chatId,
-  //     );
-  //   if (!isAuthorized) {
-  //     throw new WsException('Unauthorized access');
-  //   }
-  //   // Send stop typing
-  //   socket.to(body.chatId).emit('stopTyping');
-  //   return null; // Ack
-  // }
-  // @SubscribeMessage('sendReadReceipt')
-  // async handleSendReadReceipt(
-  //   @ConnectedSocket() socket: Socket,
-  //   @MessageBody() body: SendReadReceiptRequestDto,
-  //   @WsReqUser() reqUser: UserPayload,
-  // ) {
-  //   // Check if user is authorized
-  //   const { isAuthorized } = await this.chatService.canUserAccessPrivateChat(
-  //     reqUser.userId,
-  //     body.chatId,
-  //   );
-  //   if (!isAuthorized) {
-  //     throw new WsException('Unauthorized access');
-  //   }
-  //   // Send read receipt
-  // }
+  @SubscribeMessage('sendTyping')
+  async handleSendTyping(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: any,
+    @WsReqUser() reqUser: UserPayload,
+  ) {
+    // Check if user is authorized
+    const { isAuthorized } = await this.chatService.canUserAccessPrivateChat(
+      reqUser.userId,
+      body.chatId,
+    );
+    if (!isAuthorized) {
+      throw new WsException('Unauthorized access');
+    }
+
+    // Send typing
+    socket.to(body.chatId).emit('typing', { userId: reqUser.userId });
+  }
+
+  @SubscribeMessage('sendStopTyping')
+  async handleSendStopTyping(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: any,
+    @WsReqUser() reqUser: UserPayload,
+  ) {
+    // Check if user is authorized
+    const { isAuthorized } = await this.chatService.canUserAccessPrivateChat(
+      reqUser.userId,
+      body.chatId,
+    );
+    if (!isAuthorized) {
+      throw new WsException('Unauthorized access');
+    }
+
+    // Send stop typing
+    socket.to(body.chatId).emit('stopTyping', { userId: reqUser.userId });
+  }
+
+  @SubscribeMessage('sendReadReceipt')
+  async handleSendReadReceipt(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: SendReadReceiptRequestDto,
+    @WsReqUser() reqUser: UserPayload,
+  ) {
+    // Validate sender & Send read receipt
+    const { chatIdMessagesMap } = await this.chatService.readMessages(
+      body,
+      reqUser,
+    );
+
+    // Send to other users
+    for (const [chatId, messages] of chatIdMessagesMap.entries()) {
+      const messageIds = messages.map((message) => message.id);
+      socket.to(chatId).emit('readReceipt', { messageIds });
+    }
+
+    return ResponseFactory.createSuccessResponse('Read receipt sent');
+  }
 }

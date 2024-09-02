@@ -2,6 +2,7 @@ import {
   DeleteMessageRequestDto,
   EditMessageRequestDto,
   SendMessageRequestDto,
+  SendReadReceiptRequestDto,
 } from './dto';
 import { PrivateChat, PrivateMessage } from './entities';
 import { Injectable } from '@nestjs/common';
@@ -62,7 +63,10 @@ export class ChatsService {
     // Save to database
     const privateMessageRepository =
       this.dataSource.getRepository(PrivateMessage);
+
     privateMessage.content = body.newMessage;
+    privateMessage.editedAt = new Date();
+
     const editedMessage = await privateMessageRepository.save(privateMessage);
 
     privateChat.otherUser =
@@ -98,6 +102,56 @@ export class ChatsService {
     return {
       deletedMessage: privateMessage,
       privateChat,
+    };
+  }
+
+  async readMessages(body: SendReadReceiptRequestDto, reqUser: UserPayload) {
+    // Check if user is authorized
+    const { isAuthorized, privateMessages } =
+      await this.canUserAccessPrivateMessages(reqUser.userId, body.messageIds);
+
+    if (!isAuthorized) {
+      throw new WsException('Unauthorized access');
+    }
+
+    // Check if messages are not read and the sender is not the current user
+    const isValidRead = privateMessages.every(
+      (privateMessage) =>
+        !privateMessage.isRead && privateMessage.sender.id !== reqUser.userId,
+    );
+    if (!isValidRead) {
+      throw new WsException(
+        'Some messages are already read or your own message',
+      );
+    }
+
+    // Update messages
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+
+    privateMessages.forEach((privateMessage) => {
+      privateMessage.isRead = true;
+      privateMessage.readAt = new Date();
+    });
+
+    const updatedPrivateMessages =
+      await privateMessageRepository.save(privateMessages);
+
+    // Map messages by chat id
+    const chatIdMessagesMap = new Map<string, PrivateMessage[]>();
+    updatedPrivateMessages.forEach((privateMessage) => {
+      const chatId = privateMessage.privateChat.id;
+      const pm = chatIdMessagesMap.get(chatId);
+      if (!pm) {
+        chatIdMessagesMap.set(chatId, [privateMessage]);
+      } else {
+        pm.push(privateMessage);
+      }
+    });
+
+    return {
+      readMessages: privateMessages,
+      chatIdMessagesMap,
     };
   }
 
@@ -199,8 +253,6 @@ export class ChatsService {
   }> {
     const privateChatRepository = this.dataSource.getRepository(PrivateChat);
 
-    // console.log('lol' + privateChatIds);
-
     try {
       const privateChats = await privateChatRepository.find({
         where: [
@@ -232,6 +284,62 @@ export class ChatsService {
     } catch (error) {
       throw new WsException(
         'Failed to check private chat access: ' + error.message,
+      );
+    }
+  }
+
+  async canUserAccessPrivateMessages(
+    currentUserId: string,
+    privateMessageIds: string[],
+  ): Promise<
+    | {
+        isAuthorized: true;
+        privateMessages: PrivateMessage[];
+      }
+    | {
+        isAuthorized: false;
+        privateMessages: null;
+      }
+  > {
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+
+    try {
+      const privateMessages = await privateMessageRepository.find({
+        where: [
+          {
+            id: In(privateMessageIds),
+            privateChat: {
+              user1: { id: currentUserId },
+            },
+          },
+          {
+            id: In(privateMessageIds),
+            privateChat: {
+              user2: { id: currentUserId },
+            },
+          },
+        ],
+        relations: ['privateChat'],
+      });
+
+      const isAuthorized = privateMessages.length === privateMessageIds.length;
+
+      // Check if some of the messages are not found or user is not part of the chat
+      if (!isAuthorized) {
+        return {
+          isAuthorized,
+          privateMessages: null,
+        };
+      }
+
+      return {
+        isAuthorized,
+        privateMessages,
+      };
+    } catch (error) {
+      throw new WsException(
+        'Failed to check private message access: ' + error.message,
       );
     }
   }
@@ -279,9 +387,6 @@ export class ChatsService {
         },
       );
     }
-
-    const sql = queryBuilder.getSql();
-    console.log(sql);
 
     const allPrivateChats = await queryBuilder.getMany();
 

@@ -30,6 +30,20 @@ export class PrivateMessage {
   @Index()
   createdAt: Date;
 
+  @Column({
+    name: 'edited_at',
+    nullable: true,
+    type: 'timestamp without time zone',
+  })
+  editedAt: Date | null;
+
+  @Column({
+    name: 'read_at',
+    nullable: true,
+    type: 'timestamp without time zone',
+  })
+  readAt: Date | null;
+
   @UpdateDateColumn({
     name: 'updated_at',
   })
