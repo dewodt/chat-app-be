@@ -72,6 +72,22 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   DB_PASSWORD: string;
+
+  @IsString()
+  @IsNotEmpty()
+  CLOUDINARY_CLOUD_NAME: string;
+
+  @IsString()
+  @IsNotEmpty()
+  CLOUDINARY_API_KEY: string;
+
+  @IsString()
+  @IsNotEmpty()
+  CLOUDINARY_API_SECRET: string;
+
+  @IsString()
+  @IsNotEmpty()
+  CLOUDINARY_FOLDER: string;
 }
 
 /**

@@ -1,12 +1,24 @@
+import {
+  UpdateProfileDataRequestDto,
+  UploadProfilePictureRequestDto,
+} from './dto';
 import { User } from './entities';
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { BucketService } from 'src/bucket/bucket.service';
 import { PaginationParams } from 'src/common/decorators';
-import { MetaDto } from 'src/common/dto';
-import { DataSource } from 'typeorm';
+import { MetaDto, ResponseFactory } from 'src/common/dto';
+import { DataSource, QueryFailedError } from 'typeorm';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly bucketService: BucketService,
+  ) {}
 
   async findMatchingUser(
     usernameQuery: string | undefined,
@@ -43,5 +55,53 @@ export class UsersService {
     };
 
     return { users, meta };
+  }
+
+  async uploadProfilePicture(
+    userId: string,
+    data: UploadProfilePictureRequestDto,
+  ) {
+    // Upload
+    const newAvatarURL = await this.bucketService.upload(data.avatarImage, {
+      resource_type: 'image',
+      folder: 'avatars',
+      public_id: `user-${userId}`,
+      overwrite: true,
+    });
+
+    return newAvatarURL;
+  }
+
+  async updateProfileData(userId: string, data: UpdateProfileDataRequestDto) {
+    const userRepository = this.dataSource.getRepository(User);
+
+    try {
+      const updatedUser = await userRepository.save({
+        id: userId,
+        username: data.username,
+        name: data.name,
+        about: data.about,
+        avatarUrl: data.avatarUrl,
+      });
+
+      return updatedUser;
+    } catch (error) {
+      if (
+        error instanceof QueryFailedError &&
+        error.driverError.code === '23505'
+      ) {
+        // Username already exists
+        throw new BadRequestException(
+          ResponseFactory.createErrorResponse('Username already exists', [
+            { field: 'username', message: 'Username already exists' },
+          ]),
+        );
+      } else {
+        // Unexpected error
+        throw new InternalServerErrorException(
+          ResponseFactory.createErrorResponse('Failed to update profile data'),
+        );
+      }
+    }
   }
 }

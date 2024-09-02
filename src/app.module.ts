@@ -1,4 +1,5 @@
 import { AuthModule } from './auth/auth.module';
+import { BucketModule } from './bucket/bucket.module';
 import { ChatsModule } from './chats/chats.module';
 import { CommonModule } from './common';
 import { HttpValidationPipe } from './common/pipes';
@@ -8,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { MemoryStoredFile, NestjsFormDataModule } from 'nestjs-form-data';
 import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
 
 @Module({
@@ -32,8 +34,16 @@ import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
       }),
     }),
-    // Other (Non global) Modules
+    // Form data parser
+    NestjsFormDataModule.config({
+      isGlobal: true,
+      storage: MemoryStoredFile,
+    }),
+    // Global Auth Module
     AuthModule,
+    // Bucket module
+    BucketModule,
+    // Other (Non global) Modules
     UsersModule,
     ChatsModule,
   ],

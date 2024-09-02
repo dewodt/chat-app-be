@@ -1,4 +1,5 @@
 import {
+  IsLowercase,
   IsNotEmpty,
   IsString,
   Matches,
@@ -10,12 +11,13 @@ import { Match } from 'src/utils/class-validator';
 export class SignUpRequestDto {
   @IsString({ message: 'Username must be a string' })
   @IsNotEmpty({ message: 'Username is required' })
-  @MaxLength(255, { message: 'Username must be at most 255 characters long' })
+  @IsLowercase({ message: 'Username must be lowercase' })
+  @MaxLength(20, { message: 'Username must be at most 20 characters long' })
   username: string;
 
   @IsString({ message: 'Name must be a string' })
   @IsNotEmpty({ message: 'Name is required' })
-  @MaxLength(255, { message: 'Name must be at most 255 characters long' })
+  @MaxLength(50, { message: 'Name must be at most 50 characters long' })
   name: string;
 
   @IsString({ message: 'Password must be a string' })

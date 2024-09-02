@@ -3,7 +3,7 @@ import { AuthService } from './auth.service';
 import { HttpJwtGuard, WsJwtGuard } from './guards';
 import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { CustomConfigService } from 'src/config';
+import { CustomConfigService } from 'src/config/config.service';
 
 @Global()
 @Module({
