@@ -1,25 +1,238 @@
-import { PrivateChat } from './entities';
+import {
+  DeleteMessageRequestDto,
+  EditMessageRequestDto,
+  SendMessageRequestDto,
+} from './dto';
+import { PrivateChat, PrivateMessage } from './entities';
 import { Injectable } from '@nestjs/common';
+import { WsException } from '@nestjs/websockets';
+import { UserPayload } from 'src/auth/interfaces';
 import { PaginationParams } from 'src/common/decorators';
 import { MetaDto } from 'src/common/dto';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 
 @Injectable()
 export class ChatsService {
   constructor(private readonly dataSource: DataSource) {}
 
-  // userId1 < userId2
-  determineUserId(randomUserId1: string, randomUserId2: string) {
-    if (randomUserId1 < randomUserId2) {
+  async saveMessage(
+    body: SendMessageRequestDto,
+    reqUser: UserPayload,
+  ): Promise<{ newMessage: PrivateMessage; privateChat: PrivateChat }> {
+    // Check if user is authorized
+    const { isAuthorized, privateChat } = await this.canUserAccessPrivateChat(
+      reqUser.userId,
+      body.chatId,
+    );
+    if (!isAuthorized) {
+      throw new WsException('Unauthorized access');
+    }
+
+    // Save to database
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+
+    const newMessage = privateMessageRepository.create({
+      content: body.message,
+      privateChat: privateChat,
+      sender: reqUser,
+    });
+
+    const insertedMessage = await privateMessageRepository.save(newMessage);
+
+    privateChat.otherUser =
+      privateChat.user1.id === reqUser.userId
+        ? privateChat.user2
+        : privateChat.user1;
+
+    return { newMessage: insertedMessage, privateChat: privateChat };
+  }
+
+  async editMessage(
+    body: EditMessageRequestDto,
+    reqUser: UserPayload,
+  ): Promise<{ editedMessage: PrivateMessage; privateChat: PrivateChat }> {
+    // Check if user is authorized
+    const { isAuthorized, privateMessage, privateChat } =
+      await this.canUserAccessMessage(reqUser.userId, body.messageId);
+    if (!isAuthorized) {
+      throw new WsException('Unauthorized access');
+    }
+
+    // Save to database
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+    privateMessage.content = body.newMessage;
+    const editedMessage = await privateMessageRepository.save(privateMessage);
+
+    privateChat.otherUser =
+      reqUser.userId === privateChat.user1.id
+        ? privateChat.user2
+        : privateChat.user1;
+
+    return { editedMessage, privateChat };
+  }
+
+  async deleteMessage(
+    body: DeleteMessageRequestDto,
+    reqUser: UserPayload,
+  ): Promise<{ deletedMessage: PrivateMessage; privateChat: PrivateChat }> {
+    // Check if user is authorized
+    const { isAuthorized, privateMessage, privateChat } =
+      await this.canUserAccessMessage(reqUser.userId, body.messageId);
+    if (!isAuthorized) {
+      throw new WsException('Unauthorized access');
+    }
+
+    // Delete from database
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+
+    await privateMessageRepository.softDelete({ id: body.messageId });
+
+    privateChat.otherUser =
+      reqUser.userId === privateChat.user1.id
+        ? privateChat.user2
+        : privateChat.user1;
+
+    return {
+      deletedMessage: privateMessage,
+      privateChat,
+    };
+  }
+
+  async canUserAccessMessage(
+    currentUserId: string,
+    messageId: string,
+  ): Promise<
+    | {
+        isAuthorized: true;
+        privateMessage: PrivateMessage;
+        privateChat: PrivateChat;
+      }
+    | { isAuthorized: false; privateMessage: null; privateChat: null }
+  > {
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+
+    try {
+      const privateMessage = await privateMessageRepository.findOne({
+        where: { id: messageId },
+        relations: ['privateChat'],
+      });
+
+      // Not found id
+      if (!privateMessage) {
+        return {
+          isAuthorized: false,
+          privateMessage: null,
+          privateChat: null,
+        };
+      }
+      // Check if user is not part of the chat
+      const privateChat = privateMessage.privateChat;
+      if (
+        privateChat.user1.id !== currentUserId &&
+        privateChat.user2.id !== currentUserId
+      ) {
+        return {
+          isAuthorized: false,
+          privateMessage: null,
+          privateChat: null,
+        };
+      }
+
       return {
-        user1Id: randomUserId1,
-        user2Id: randomUserId2,
+        isAuthorized: true,
+        privateMessage,
+        privateChat,
       };
-    } else {
+    } catch (error) {
+      throw new WsException('Failed to check message access');
+    }
+  }
+
+  async canUserAccessPrivateChat(
+    currentUserId: string,
+    privateChatId: string,
+  ): Promise<
+    | {
+        isAuthorized: true;
+        privateChat: PrivateChat;
+      }
+    | { isAuthorized: false; privateChat: null }
+  > {
+    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
+
+    try {
+      const privateChat = await privateChatRepository
+        .createQueryBuilder('privateChat')
+        .where(
+          '(privateChat.user1_id = :currentUserId OR privateChat.user2_id = :currentUserId)',
+          { currentUserId },
+        )
+        .andWhere('(privateChat.id = :privateChatId)', { privateChatId })
+        .getOne();
+
+      if (!privateChat) {
+        return {
+          isAuthorized: false,
+          privateChat: null,
+        };
+      }
+
       return {
-        user1Id: randomUserId2,
-        user2Id: randomUserId1,
+        isAuthorized: true,
+        privateChat,
       };
+    } catch (error) {
+      throw new WsException('Failed to check private chat access');
+    }
+  }
+
+  async canUserAccessPrivateChats(
+    currentUserId: string,
+    privateChatIds: string[],
+  ): Promise<{
+    isAuthorized: boolean;
+    privateChats: PrivateChat[];
+  }> {
+    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
+
+    // console.log('lol' + privateChatIds);
+
+    try {
+      const privateChats = await privateChatRepository.find({
+        where: [
+          {
+            id: In(privateChatIds), // And
+            user1: { id: currentUserId },
+          },
+          // Or
+          {
+            id: In(privateChatIds), // And
+            user2: { id: currentUserId },
+          },
+        ],
+      });
+
+      const isAuthorized = privateChats.length === privateChatIds.length;
+
+      if (!isAuthorized) {
+        return {
+          isAuthorized,
+          privateChats: [],
+        };
+      }
+
+      return {
+        isAuthorized,
+        privateChats,
+      };
+    } catch (error) {
+      throw new WsException(
+        'Failed to check private chat access: ' + error.message,
+      );
     }
   }
 
@@ -85,9 +298,9 @@ export class ChatsService {
 
     privateChats.forEach((privateChat) => {
       if (privateChat.user1.id !== currentUserId) {
-        privateChat.toUser = privateChat.user1;
+        privateChat.otherUser = privateChat.user1;
       } else {
-        privateChat.toUser = privateChat.user2;
+        privateChat.otherUser = privateChat.user2;
       }
     });
 

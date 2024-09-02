@@ -1,4 +1,4 @@
-import { ChatType, PrivateChat } from '../entities';
+import { ChatType, PrivateChat, PrivateMessage } from '../entities';
 
 export interface ChatInbox {
   chatId: string;
@@ -13,13 +13,21 @@ export interface ChatInbox {
   };
 }
 
+export interface Message {
+  messageId: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+}
+
 export class ChatResponseFactory {
   static createPrivateChatInbox(privateChat: PrivateChat) {
     return {
       chatId: privateChat.id,
       type: ChatType.PRIVATE,
-      title: privateChat.toUser.name,
-      avatarUrl: privateChat.toUser.avatarUrl,
+      title: privateChat.otherUser.name,
+      avatarUrl: privateChat.otherUser.avatarUrl,
       unreadCount: privateChat.unreadCount,
       lastMessage: {
         content: privateChat.latestMessage.content,
@@ -29,9 +37,25 @@ export class ChatResponseFactory {
     };
   }
 
+  static createMessage(message: PrivateMessage): Message {
+    return {
+      messageId: message.id,
+      content: message.content,
+      createdAt: message.createdAt,
+      updatedAt: message.updatedAt,
+      deletedAt: message.deletedAt,
+    };
+  }
+
   static createPrivateChatInboxes(privateChats: PrivateChat[]) {
     return privateChats.map((privateChat) =>
       ChatResponseFactory.createPrivateChatInbox(privateChat),
+    );
+  }
+
+  static createMessages(messages: PrivateMessage[]) {
+    return messages.map((message) =>
+      ChatResponseFactory.createMessage(message),
     );
   }
 }

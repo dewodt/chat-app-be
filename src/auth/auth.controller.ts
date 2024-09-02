@@ -1,13 +1,23 @@
 import { AuthService } from './auth.service';
 import { SessionResponseDto, SignInRequestDto, SignUpRequestDto } from './dto';
+import { HttpJwtGuard } from './guards';
 import { UserPayload } from './interfaces';
-import { Body, Controller, Get, HttpCode, Post, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { Response } from 'express';
-import { ReqUser } from 'src/common/decorators';
+import { HttpJwtToken, HttpReqUser } from 'src/common/decorators';
 import { Public } from 'src/common/decorators/public.decorator';
 import { ResponseFactory } from 'src/common/dto';
 
 @Controller('auth')
+@UseGuards(HttpJwtGuard)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -23,12 +33,15 @@ export class AuthController {
 
     // Map result to response
     const responseData: SessionResponseDto = {
-      userId: user.id,
-      username: user.username,
+      token,
+      user: {
+        userId: user.id,
+        username: user.username,
+      },
     };
 
     // Set cookie
-    respose.cookie('chat-app-auth', token, {
+    respose.cookie('auth-token', token, {
       maxAge: 1 * 24 * 60 * 60 * 1000, // 1 day
       httpOnly: true,
       secure: true,
@@ -45,7 +58,7 @@ export class AuthController {
   @HttpCode(200)
   async logout(@Res({ passthrough: true }) respose: Response) {
     // Clear cookie
-    respose.clearCookie('chat-app-auth');
+    respose.clearCookie('auth-token');
 
     return ResponseFactory.createSuccessResponse('Sign out success');
   }
@@ -62,11 +75,14 @@ export class AuthController {
 
   @Get('session')
   @HttpCode(200)
-  async self(@ReqUser() user: UserPayload) {
+  async self(@HttpReqUser() user: UserPayload, @HttpJwtToken() token: string) {
     // Map response
     const responseData: SessionResponseDto = {
-      userId: user.userId,
-      username: user.username,
+      token,
+      user: {
+        userId: user.userId,
+        username: user.username,
+      },
     };
 
     // Return response

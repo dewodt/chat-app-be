@@ -43,6 +43,6 @@ export class PrivateChat {
 
   // Aditional field
   latestMessage: PrivateMessage;
-  toUser: User; // The user that is not the current user
+  otherUser: User; // The user that is not the current user
   unreadCount: number;
 }

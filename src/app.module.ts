@@ -1,12 +1,12 @@
 import { AuthModule } from './auth/auth.module';
-import { JwtAuthGuard } from './auth/guards';
 import { ChatsModule } from './chats/chats.module';
 import { CommonModule } from './common';
+import { HttpValidationPipe } from './common/pipes';
 import { CustomConfigModule, CustomConfigService } from './config';
 import { loggerConfig } from './config/logger';
 import { UsersModule } from './users/users.module';
-import { Module, ValidationPipe } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
 
@@ -41,15 +41,7 @@ import { LoggerErrorInterceptor, LoggerModule } from 'nestjs-pino';
     // Global validation pipe
     {
       provide: APP_PIPE,
-      useValue: new ValidationPipe({
-        transform: true,
-        whitelist: true,
-      }),
-    },
-    // Global auth guard
-    {
-      provide: APP_GUARD,
-      useClass: JwtAuthGuard,
+      useClass: HttpValidationPipe,
     },
     // Global error logger with interceptor (nestjs-pino)
     {

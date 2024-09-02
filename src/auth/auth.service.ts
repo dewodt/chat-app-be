@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
+import { Request } from 'express';
+import { Socket } from 'socket.io';
 import { ResponseFactory } from 'src/common/dto';
 import { User } from 'src/users/entities';
 import { DataSource } from 'typeorm';
@@ -18,6 +20,82 @@ export class AuthService {
     private dataSource: DataSource,
     private jwtService: JwtService,
   ) {}
+
+  /**
+   * Extracts token from socket.io connection
+   *
+   * @param socket
+   * @returns
+   */
+  wsExtractJwtToken(socket: Socket): string | null {
+    const handshakeAuthToken = socket.handshake.auth['auth-token'] as
+      | string
+      | undefined;
+
+    const [bearer, headerToken] =
+      socket.handshake.headers.authorization?.split(' ') || [];
+    const headersAuthToken = bearer === 'Bearer' ? headerToken : undefined;
+
+    let authToken: string | null = null;
+    if (handshakeAuthToken) {
+      authToken = handshakeAuthToken;
+    } else if (headersAuthToken) {
+      authToken = headersAuthToken;
+    } else {
+      return null;
+    }
+
+    return authToken;
+  }
+
+  /**
+   * Extranct jwt from http request
+   *
+   * @param request
+   * @returns
+   */
+  httpExtractJwtToken(request: Request): string | null {
+    // Get from cookie
+    const jwtFromCookie = request.cookies['auth-token'] as string | undefined;
+
+    // Get from header
+    const [type, bearerToken] = request.headers.authorization?.split(' ') || [
+      '',
+      '',
+    ];
+    const jwtFromHeader = type === 'Bearer' ? bearerToken : undefined;
+
+    if (jwtFromCookie) {
+      return jwtFromCookie;
+    } else if (jwtFromHeader) {
+      return jwtFromHeader;
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Verify JWT
+   *
+   * @param token
+   * @returns UserPayload | null
+   */
+  async verifyJwt(token: string): Promise<UserPayload | null> {
+    let userPayload: UserPayload | null = null;
+
+    try {
+      const jwtPayload = await this.jwtService.verifyAsync<JwtPayload>(token);
+
+      userPayload = {
+        userId: jwtPayload.sub,
+        username: jwtPayload.username,
+      };
+
+      return userPayload;
+    } catch (error) {
+      return null;
+    }
+  }
 
   /**
    * Validate user

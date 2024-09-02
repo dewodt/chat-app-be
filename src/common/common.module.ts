@@ -1,8 +1,9 @@
+import { HttpValidationPipe, WsValidationPipe } from './pipes/validation.pipe';
 import { Global, Module } from '@nestjs/common';
 
 @Global()
 @Module({
-  providers: [],
-  exports: [],
+  providers: [HttpValidationPipe, WsValidationPipe],
+  exports: [HttpValidationPipe, WsValidationPipe],
 })
 export class CommonModule {}
