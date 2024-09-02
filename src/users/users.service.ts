@@ -37,9 +37,6 @@ export class UsersService {
     // Count total
     const totalData = await queryBuilder.getCount();
     const totalPage = Math.ceil(totalData / pagination.limit);
-    if (pagination.page > totalPage) {
-      pagination.page = totalPage;
-    }
     queryBuilder = queryBuilder
       .skip((pagination.page - 1) * pagination.limit)
       .take(pagination.limit);

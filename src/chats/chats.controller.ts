@@ -1,6 +1,14 @@
 import { ChatsService } from './chats.service';
 import { ChatResponseFactory } from './dto/chat.dto';
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { HttpJwtGuard } from 'src/auth/guards';
 import { UserPayload } from 'src/auth/interfaces';
 import {
@@ -36,6 +44,32 @@ export class ChatsController {
     const responseData = ResponseFactory.createSuccessPaginatedResponse(
       'Chat inboxes fetched successfully',
       chatInboxes,
+      metaDto,
+    );
+
+    return responseData;
+  }
+
+  @Get(':id/messages')
+  @HttpCode(200)
+  async getChatMessages(
+    @HttpReqUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) chatId: string,
+    @Pagination({ defaultLimit: 25 }) pagination: PaginationParams,
+  ) {
+    // Get private chat messages
+    const { privateMessages, metaDto } =
+      await this.chatsService.getPrivateChatMessage(
+        user.userId,
+        chatId,
+        pagination,
+      );
+
+    // Map to response
+    const messages = ChatResponseFactory.createMessages(privateMessages);
+    const responseData = ResponseFactory.createSuccessPaginatedResponse(
+      'Chat messages fetched successfully',
+      messages,
       metaDto,
     );
 

@@ -5,7 +5,7 @@ import {
   SendReadReceiptRequestDto,
 } from './dto';
 import { PrivateChat, PrivateMessage } from './entities';
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { WsException } from '@nestjs/websockets';
 import { UserPayload } from 'src/auth/interfaces';
 import { PaginationParams } from 'src/common/decorators';
@@ -166,44 +166,25 @@ export class ChatsService {
       }
     | { isAuthorized: false; privateMessage: null; privateChat: null }
   > {
-    const privateMessageRepository =
-      this.dataSource.getRepository(PrivateMessage);
+    const { isAuthorized, privateMessages } =
+      await this.canUserAccessPrivateMessages(currentUserId, [messageId]);
 
-    try {
-      const privateMessage = await privateMessageRepository.findOne({
-        where: { id: messageId },
-        relations: ['privateChat'],
-      });
-
-      // Not found id
-      if (!privateMessage) {
-        return {
-          isAuthorized: false,
-          privateMessage: null,
-          privateChat: null,
-        };
-      }
-      // Check if user is not part of the chat
-      const privateChat = privateMessage.privateChat;
-      if (
-        privateChat.user1.id !== currentUserId &&
-        privateChat.user2.id !== currentUserId
-      ) {
-        return {
-          isAuthorized: false,
-          privateMessage: null,
-          privateChat: null,
-        };
-      }
-
+    if (!isAuthorized) {
       return {
-        isAuthorized: true,
-        privateMessage,
-        privateChat,
+        isAuthorized: false,
+        privateMessage: null,
+        privateChat: null,
       };
-    } catch (error) {
-      throw new WsException('Failed to check message access');
     }
+
+    const privateMessage = privateMessages[0];
+    const privateChat = privateMessage.privateChat;
+
+    return {
+      isAuthorized: true,
+      privateMessage,
+      privateChat,
+    };
   }
 
   async canUserAccessPrivateChat(
@@ -216,32 +197,24 @@ export class ChatsService {
       }
     | { isAuthorized: false; privateChat: null }
   > {
-    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
+    const { isAuthorized, privateChats } = await this.canUserAccessPrivateChats(
+      currentUserId,
+      [privateChatId],
+    );
 
-    try {
-      const privateChat = await privateChatRepository
-        .createQueryBuilder('privateChat')
-        .where(
-          '(privateChat.user1_id = :currentUserId OR privateChat.user2_id = :currentUserId)',
-          { currentUserId },
-        )
-        .andWhere('(privateChat.id = :privateChatId)', { privateChatId })
-        .getOne();
-
-      if (!privateChat) {
-        return {
-          isAuthorized: false,
-          privateChat: null,
-        };
-      }
-
+    if (!isAuthorized) {
       return {
-        isAuthorized: true,
-        privateChat,
+        isAuthorized: false,
+        privateChat: null,
       };
-    } catch (error) {
-      throw new WsException('Failed to check private chat access');
     }
+
+    const privateChat = privateChats[0];
+
+    return {
+      isAuthorized: true,
+      privateChat: privateChat,
+    };
   }
 
   async canUserAccessPrivateChats(
@@ -393,9 +366,6 @@ export class ChatsService {
     // Must paginate manually becuase typeorm pagination is broken when using joins 💀
     // https://github.com/typeorm/typeorm/issues/4742
     const totalPage = Math.ceil(allPrivateChats.length / pagination.limit);
-    if (pagination.page > totalPage) {
-      pagination.page = totalPage;
-    }
     const privateChats = allPrivateChats.slice(
       (pagination.page - 1) * pagination.limit,
       pagination.page * pagination.limit,
@@ -420,5 +390,50 @@ export class ChatsService {
       privateChats,
       metaDto,
     };
+  }
+
+  // Get privat chat message from latest to oldest
+  async getPrivateChatMessage(
+    currentUserId: string,
+    privateChatId: string,
+    pagination: PaginationParams,
+  ) {
+    // Check if user is authorized
+    const { isAuthorized } = await this.canUserAccessPrivateChat(
+      currentUserId,
+      privateChatId,
+    );
+    if (!isAuthorized) {
+      throw new BadRequestException('Unauthorized access');
+    }
+
+    // Get paginated messages
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+
+    const [privateMessages, totalData] =
+      await privateMessageRepository.findAndCount({
+        where: {
+          privateChat: { id: privateChatId },
+        },
+        order: {
+          createdAt: 'DESC',
+        },
+        skip: (pagination.page - 1) * pagination.limit,
+        take: pagination.limit,
+      });
+
+    const totalPage = Math.ceil(totalData / pagination.limit);
+
+    const metaDto: MetaDto = {
+      page: pagination.page,
+      limit: pagination.limit,
+      totalData,
+      totalPage,
+    };
+
+    // Note: read update is done in the websocket hanlder, not http request
+
+    return { privateMessages, metaDto };
   }
 }
