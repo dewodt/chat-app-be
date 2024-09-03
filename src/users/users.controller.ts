@@ -21,6 +21,7 @@ import {
 import { FormDataRequest } from 'nestjs-form-data';
 import { HttpJwtGuard } from 'src/auth/guards';
 import { UserPayload } from 'src/auth/interfaces';
+import { ChatResponseFactory } from 'src/chats/dto';
 import {
   HttpReqUser,
   Pagination,
@@ -54,6 +55,30 @@ export class UsersController {
       usersDto,
       meta,
     );
+  }
+
+  // Get existing chat (if any) or create new chat
+  @Post(':id/chats')
+  @HttpCode(200)
+  async newChat(
+    @Param('id', ParseUUIDPipe) targetUserId: string,
+    @HttpReqUser() user: UserPayload,
+  ) {
+    const { newChat } = await this.usersService.getExistingOrCreateNewChat(
+      user.userId,
+      targetUserId,
+    );
+
+    const chat = ChatResponseFactory.createPrivateChat(newChat);
+
+    // Map response
+    const responseData = ResponseFactory.createSuccessResponse(
+      'New chat created successfully',
+      chat,
+    );
+
+    // Return response
+    return responseData;
   }
 
   @Post(':id/profile-picture')

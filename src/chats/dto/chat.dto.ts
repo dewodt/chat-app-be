@@ -49,6 +49,18 @@ export class ChatResponseFactory {
     };
   }
 
+  static createPrivateChat(privateChat: PrivateChat) {
+    return {
+      chatId: privateChat.id,
+      type: ChatType.PRIVATE,
+      title: privateChat.otherUser.name,
+      avatarUrl: privateChat.otherUser.avatarUrl,
+      messages: privateChat.messages.map((message) =>
+        ChatResponseFactory.createMessage(message),
+      ),
+    };
+  }
+
   static createPrivateChatInboxes(privateChats: PrivateChat[]) {
     return privateChats.map((privateChat) =>
       ChatResponseFactory.createPrivateChatInbox(privateChat),
