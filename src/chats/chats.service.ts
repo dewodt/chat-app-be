@@ -117,7 +117,7 @@ export class ChatsService {
     // Check if messages are not read and the sender is not the current user
     const isValidRead = privateMessages.every(
       (privateMessage) =>
-        !privateMessage.isRead && privateMessage.sender.id !== reqUser.userId,
+        !privateMessage.readAt && privateMessage.sender.id !== reqUser.userId,
     );
     if (!isValidRead) {
       throw new WsException(
@@ -130,7 +130,6 @@ export class ChatsService {
       this.dataSource.getRepository(PrivateMessage);
 
     privateMessages.forEach((privateMessage) => {
-      privateMessage.isRead = true;
       privateMessage.readAt = new Date();
     });
 
@@ -336,7 +335,7 @@ export class ChatsService {
         'unreadCountPrivateMessage',
         (qb) =>
           qb.andWhere(
-            '(unreadCountPrivateMessage.is_read = false AND unreadCountPrivateMessage.sender_id <> :currentUserId)',
+            '(unreadCountPrivateMessage.read_at IS NULL AND unreadCountPrivateMessage.sender_id <> :currentUserId)',
             { currentUserId },
           ),
       )

@@ -86,8 +86,6 @@ export class SeederService {
           const privateMessage = queryRunner.manager.create(PrivateMessage, {
             id: faker.string.uuid(),
             privateChat,
-            // isRead: true,
-            // sender: faker.helpers.arrayElement([user, randomUser]),
             content: faker.lorem.sentence(),
             createdAt: createdAt,
             deletedAt: faker.datatype.boolean({ probability: 0.1 })
@@ -96,13 +94,13 @@ export class SeederService {
           });
 
           if (i >= determinedMessageStatusCount || isAllRead) {
-            privateMessage.isRead = true;
+            privateMessage.readAt = createdAt;
             privateMessage.sender = faker.helpers.arrayElement([
               user,
               randomUser,
             ]);
           } else {
-            privateMessage.isRead = false;
+            privateMessage.readAt = null;
             privateMessage.sender = lastMassgeSender;
           }
 

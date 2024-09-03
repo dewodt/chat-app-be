@@ -20,10 +20,6 @@ export class PrivateMessage {
   @Column('text')
   content: string;
 
-  @Column({ name: 'is_read', default: false })
-  @Index()
-  isRead: boolean;
-
   @CreateDateColumn({
     name: 'created_at',
   })
@@ -42,6 +38,7 @@ export class PrivateMessage {
     nullable: true,
     type: 'timestamp without time zone',
   })
+  @Index()
   readAt: Date | null;
 
   @UpdateDateColumn({
