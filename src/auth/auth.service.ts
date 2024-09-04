@@ -1,9 +1,11 @@
 import { SignInRequestDto, SignUpRequestDto } from './dto';
+import { SecurityRequestDto } from './dto/security.dto.ts';
 import { JwtPayload, UserPayload } from './interfaces';
 import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -159,7 +161,16 @@ export class AuthService {
     // Check if user exists
     if (!user) {
       throw new UnauthorizedException(
-        ResponseFactory.createErrorResponse('Invalid credentials'),
+        ResponseFactory.createErrorResponse('Invalid credentials', [
+          {
+            field: 'username',
+            message: 'Invalid credentials',
+          },
+          {
+            field: 'password',
+            message: 'Invalid credentials',
+          },
+        ]),
       );
     }
 
@@ -214,5 +225,70 @@ export class AuthService {
     }
 
     return insertedUser;
+  }
+
+  async changePassword(currentUserId: string, body: SecurityRequestDto) {
+    // Find user
+    const userRepository = this.dataSource.getRepository(User);
+    const user = await userRepository.findOneBy({ id: currentUserId });
+
+    // Check if user exists
+    if (!user) {
+      throw new NotFoundException(
+        ResponseFactory.createErrorResponse('User not found'),
+      );
+    }
+
+    // Check if current password is correct
+    const isCurrentPasswordCorrect = await compare(
+      body.currentPassword,
+      user.password,
+    );
+
+    // Current password is invalid
+    if (!isCurrentPasswordCorrect) {
+      throw new BadRequestException(
+        ResponseFactory.createErrorResponse('Current password is invalid', [
+          {
+            field: 'currentPassword',
+            message: 'Current password is invalid',
+          },
+        ]),
+      );
+    }
+
+    // Current password valid, check if new password is different
+    if (body.currentPassword === body.newPassword) {
+      throw new BadRequestException(
+        ResponseFactory.createErrorResponse(
+          'New password must be different from the current password',
+          [
+            {
+              field: 'newPassword',
+              message:
+                'New password must be different from the current password',
+            },
+            {
+              field: 'confirmNewPassword',
+              message:
+                'New password must be different from the current password',
+            },
+          ],
+        ),
+      );
+    }
+
+    // Update password
+    const hashedPassword = await hash(body.newPassword, 10);
+    user.password = hashedPassword;
+
+    try {
+      const updatedUser = await userRepository.save(user);
+      return { updatedUser };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        ResponseFactory.createErrorResponse('An error occurred'),
+      );
+    }
   }
 }

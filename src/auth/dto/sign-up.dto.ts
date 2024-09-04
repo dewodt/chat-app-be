@@ -12,6 +12,7 @@ export class SignUpRequestDto {
   @IsString({ message: 'Username must be a string' })
   @IsNotEmpty({ message: 'Username is required' })
   @IsLowercase({ message: 'Username must be lowercase' })
+  @MinLength(3, { message: 'Username must be at least 3 characters long' })
   @MaxLength(20, { message: 'Username must be at most 20 characters long' })
   username: string;
 

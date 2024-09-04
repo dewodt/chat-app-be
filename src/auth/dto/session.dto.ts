@@ -1,7 +1,4 @@
 export interface SessionResponseDto {
-  token: string;
-  user: {
-    userId: string;
-    username: string;
-  };
+  userId: string;
+  username: string;
 }

@@ -1,5 +1,10 @@
 import { AuthService } from './auth.service';
-import { SessionResponseDto, SignInRequestDto, SignUpRequestDto } from './dto';
+import {
+  SecurityRequestDto,
+  SessionResponseDto,
+  SignInRequestDto,
+  SignUpRequestDto,
+} from './dto';
 import { HttpJwtGuard } from './guards';
 import { UserPayload } from './interfaces';
 import {
@@ -7,12 +12,13 @@ import {
   Controller,
   Get,
   HttpCode,
+  Patch,
   Post,
   Res,
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { HttpJwtToken, HttpReqUser } from 'src/common/decorators';
+import { HttpReqUser } from 'src/common/decorators';
 import { Public } from 'src/common/decorators/public.decorator';
 import { ResponseFactory } from 'src/common/dto';
 
@@ -33,11 +39,8 @@ export class AuthController {
 
     // Map result to response
     const responseData: SessionResponseDto = {
-      token,
-      user: {
-        userId: user.id,
-        username: user.username,
-      },
+      userId: user.id,
+      username: user.username,
     };
 
     // Set cookie
@@ -75,14 +78,11 @@ export class AuthController {
 
   @Get('session')
   @HttpCode(200)
-  async self(@HttpReqUser() user: UserPayload, @HttpJwtToken() token: string) {
+  async self(@HttpReqUser() user: UserPayload) {
     // Map response
     const responseData: SessionResponseDto = {
-      token,
-      user: {
-        userId: user.userId,
-        username: user.username,
-      },
+      userId: user.userId,
+      username: user.username,
     };
 
     // Return response
@@ -90,5 +90,16 @@ export class AuthController {
       'Get session success',
       responseData,
     );
+  }
+
+  @Patch('security')
+  @HttpCode(200)
+  async security(
+    @Body() body: SecurityRequestDto,
+    @HttpReqUser() reqUser: UserPayload,
+  ) {
+    await this.authService.changePassword(reqUser.userId, body);
+
+    return ResponseFactory.createSuccessResponse('Change password success');
   }
 }
