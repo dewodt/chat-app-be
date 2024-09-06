@@ -35,10 +35,9 @@ export class UpdateProfileDataRequestDto {
   @MaxLength(50, { message: 'Name must be at most 50 characters.' })
   name: string;
 
-  @IsOptional()
   @IsString({ message: 'Description must be a string.' })
-  @MaxLength(200, { message: 'Description must be at most 200 characters.' })
-  about: string | null;
+  @MaxLength(140, { message: 'Description must be at most 140 characters.' })
+  about: string;
 }
 
 export class UploadProfilePictureRequestDto {
@@ -53,5 +52,5 @@ export class UploadProfilePictureRequestDto {
 }
 
 export interface UploadProfilePictureResponseDto {
-  avatarUrl: string;
+  newAvatarUrl: string;
 }

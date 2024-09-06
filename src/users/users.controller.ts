@@ -8,7 +8,6 @@ import { UsersService } from './users.service';
 import {
   Body,
   Controller,
-  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -57,6 +56,69 @@ export class UsersController {
     );
   }
 
+  @Post('profile-picture')
+  @FormDataRequest()
+  @HttpCode(200)
+  async uploadProfilePicture(
+    @Body() body: UploadProfilePictureRequestDto,
+    @HttpReqUser() reqUser: UserPayload,
+  ) {
+    // Upload profile picture
+    const newAvatarURL = await this.usersService.uploadProfilePicture(
+      reqUser.userId,
+      body,
+    );
+
+    // Map response
+    const responseData: UploadProfilePictureResponseDto = {
+      newAvatarUrl: newAvatarURL,
+    };
+
+    // Return response
+    return ResponseFactory.createSuccessResponse(
+      'Upload profile picture success',
+      responseData,
+    );
+  }
+
+  @Put('profile-data')
+  @HttpCode(200)
+  async updateProfileData(
+    @Body() body: UpdateProfileDataRequestDto,
+    @HttpReqUser() reqUser: UserPayload,
+  ) {
+    // Update profile data
+    const updatedUser = await this.usersService.updateProfileData(
+      reqUser.userId,
+      body,
+    );
+
+    // Map user to dto
+    const userDto = UserResponseFactory.createUserDto(updatedUser);
+
+    // Return response
+    return ResponseFactory.createSuccessResponse(
+      'Update profile data success',
+      userDto,
+    );
+  }
+
+  @Get('profile-data')
+  @HttpCode(200)
+  async getProfileData(@HttpReqUser() reqUser: UserPayload) {
+    // Get profile data
+    const { user } = await this.usersService.getProfileData(reqUser.userId);
+
+    // Map user to dto
+    const userDto = UserResponseFactory.createUserDto(user);
+
+    // Return response
+    return ResponseFactory.createSuccessResponse(
+      'Get profile data success',
+      userDto,
+    );
+  }
+
   // Get existing chat (if any) or create new chat
   @Post(':id/chats')
   @HttpCode(200)
@@ -73,72 +135,11 @@ export class UsersController {
 
     // Map response
     const responseData = ResponseFactory.createSuccessResponse(
-      'New chat created successfully',
+      'Get existing or created new chat successfully',
       chat,
     );
 
     // Return response
     return responseData;
-  }
-
-  @Post(':id/profile-picture')
-  @FormDataRequest()
-  @HttpCode(200)
-  async uploadProfilePicture(
-    @Body() body: UploadProfilePictureRequestDto,
-    @Param('id', ParseUUIDPipe) id: string,
-    @HttpReqUser() user: UserPayload,
-  ) {
-    // Check if user is updating their own profile picture
-    if (user.userId !== id) {
-      throw new ForbiddenException(
-        ResponseFactory.createErrorResponse(
-          'You are not allowed to update other user profile picture.',
-        ),
-      );
-    }
-
-    // Upload profile picture
-    const newAvatarURL = await this.usersService.uploadProfilePicture(id, body);
-
-    // Map response
-    const responseData: UploadProfilePictureResponseDto = {
-      avatarUrl: newAvatarURL,
-    };
-
-    // Return response
-    return ResponseFactory.createSuccessResponse(
-      'Upload profile picture success',
-      responseData,
-    );
-  }
-
-  @Put(':id/profile-data')
-  @HttpCode(200)
-  async updateProfileData(
-    @Body() body: UpdateProfileDataRequestDto,
-    @Param('id', ParseUUIDPipe) id: string,
-    @HttpReqUser() user: UserPayload,
-  ) {
-    // Check if user is updating their own profile data
-    if (user.userId !== id) {
-      throw new ForbiddenException(
-        ResponseFactory.createErrorResponse(
-          'You are not allowed to update other user profile data.',
-        ),
-      );
-    }
-
-    // Update profile data
-    const updatedUser = await this.usersService.updateProfileData(id, body);
-
-    // Map user to dto
-    const userDto = UserResponseFactory.createUserDto(updatedUser);
-
-    // Return response
-    return ResponseFactory.createSuccessResponse(
-      'Update profile data success',
-      userDto,
-    );
   }
 }

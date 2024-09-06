@@ -27,7 +27,7 @@ export class ChatResponseFactory {
     return {
       chatId: privateChat.id,
       type: ChatType.PRIVATE,
-      title: privateChat.otherUser.name,
+      title: privateChat.otherUser.username,
       avatarUrl: privateChat.otherUser.avatarUrl,
       unreadCount: privateChat.unreadCount,
       lastMessage: {
@@ -53,7 +53,7 @@ export class ChatResponseFactory {
     return {
       chatId: privateChat.id,
       type: ChatType.PRIVATE,
-      title: privateChat.otherUser.name,
+      title: privateChat.otherUser.username,
       avatarUrl: privateChat.otherUser.avatarUrl,
       messages: privateChat.messages.map((message) =>
         ChatResponseFactory.createMessage(message),

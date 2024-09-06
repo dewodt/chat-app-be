@@ -213,6 +213,7 @@ export class AuthService {
       username: body.username,
       name: body.name,
       password: hashedPassword,
+      about: "Can't talk, ChatApp only!", // Default status
     });
 
     try {

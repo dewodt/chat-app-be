@@ -5,7 +5,7 @@ export interface UserResponseDto {
   username: string;
   name: string;
   avatarUrl: string | null;
-  about: string | null;
+  about: string;
 }
 
 export class UserResponseFactory {

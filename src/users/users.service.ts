@@ -70,6 +70,19 @@ export class UsersService {
     return newAvatarURL;
   }
 
+  async getProfileData(userId: string) {
+    const userRepository = this.dataSource.getRepository(User);
+
+    const user = await userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new BadRequestException(
+        ResponseFactory.createErrorResponse('User not found'),
+      );
+    }
+
+    return { user };
+  }
+
   async updateProfileData(userId: string, data: UpdateProfileDataRequestDto) {
     const userRepository = this.dataSource.getRepository(User);
 

@@ -24,11 +24,8 @@ export class User {
   @Column()
   name: string;
 
-  @Column({
-    type: 'text',
-    nullable: true,
-  })
-  about: string | null;
+  @Column()
+  about: string;
 
   @Column({
     name: 'avatar_url',

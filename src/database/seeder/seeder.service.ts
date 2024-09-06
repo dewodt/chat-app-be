@@ -19,15 +19,17 @@ export class SeederService {
     const generatedPrivateChats: PrivateChat[] = [];
     const generatedPrivateMessages: PrivateMessage[] = [];
 
-    // Generate 30 users
+    // Generate 50 users
     const password = await hash('password', 10);
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 50; i++) {
       const user = queryRunner.manager.create(User, {
         id: faker.string.uuid(),
         username: faker.internet.userName(),
         name: faker.person.firstName(),
         password: password,
-        about: faker.datatype.boolean() ? faker.lorem.sentence() : null,
+        about: faker.datatype.boolean()
+          ? faker.lorem.sentence()
+          : "Can't talk, ChatApp only!",
         avatarUrl: faker.datatype.boolean() ? faker.image.avatar() : null,
       });
 
@@ -44,7 +46,7 @@ export class SeederService {
     });
     generatedUsers.push(customUser);
 
-    // For each user, generate 10-15 private chats
+    // For each user, generate 30-40 private chats
     for (const user of generatedUsers) {
       const usersWithoutSelf = generatedUsers.filter((u) => u.id !== user.id);
       generatedPrivateChats.forEach((pc) => {
@@ -80,8 +82,16 @@ export class SeederService {
         const determinedMessageStatusCount = 5;
         const lastMassgeSender = faker.helpers.arrayElement([user, randomUser]);
 
+        let previousCreatedAt = addHours(
+          new Date(),
+          -faker.number.int({ min: 1, max: 24 * 7 }),
+        );
         for (let i = 0; i < randomMessages; i++) {
-          const createdAt = addHours(new Date(), i * -6);
+          const createdAt = addHours(
+            previousCreatedAt,
+            -i * faker.number.int({ min: 3, max: 6 }),
+          );
+          previousCreatedAt = createdAt;
 
           const privateMessage = queryRunner.manager.create(PrivateMessage, {
             id: faker.string.uuid(),
