@@ -56,6 +56,8 @@ export class ChatsService {
       sender: { id: reqUser.userId },
     });
 
+    newMessage.privateChat = privateChat;
+
     return { newMessage, privateChat };
   }
 
@@ -76,10 +78,11 @@ export class ChatsService {
     const privateMessageRepository =
       this.dataSource.getRepository(PrivateMessage);
 
-    privateMessage.content = body.newMessage;
+    privateMessage.content = body.message;
     privateMessage.editedAt = new Date();
 
     const editedMessage = await privateMessageRepository.save(privateMessage);
+    editedMessage.privateChat = privateChat;
 
     return { editedMessage, privateChat };
   }
@@ -101,10 +104,11 @@ export class ChatsService {
     const privateMessageRepository =
       this.dataSource.getRepository(PrivateMessage);
 
-    await privateMessageRepository.softDelete({ id: body.messageId });
+    privateMessage.deletedAt = new Date();
+    const deletedMessage = await privateMessageRepository.save(privateMessage);
 
     return {
-      deletedMessage: privateMessage,
+      deletedMessage,
       privateChat,
     };
   }
@@ -283,7 +287,7 @@ export class ChatsService {
             },
           },
         ],
-        relations: ['privateChat'],
+        relations: ['privateChat', 'sender'],
         withDeleted: true,
       });
 
@@ -407,6 +411,10 @@ export class ChatsService {
         take: pagination.limit,
         relations: ['sender'],
       });
+
+    privateMessages.forEach((message) => {
+      message.privateChat = privateChat;
+    });
 
     const totalPage = Math.ceil(totalData / pagination.limit);
 

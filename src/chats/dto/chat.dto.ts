@@ -15,6 +15,7 @@ export interface ChatInbox {
 
 export interface Message {
   messageId: string;
+  chatId: string;
   content: string | null;
   editedAt: Date | null;
   isCurrentUserSender: boolean;
@@ -55,6 +56,7 @@ export class ChatResponseFactory {
   ): Message {
     return {
       messageId: message.id,
+      chatId: message.privateChat.id,
       content: message.deletedAt ? null : message.content,
       createdAt: message.createdAt,
       editedAt: message.editedAt,

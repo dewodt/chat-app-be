@@ -54,7 +54,6 @@ export class BucketService {
 
       return (result as any).secure_url;
     } catch (error) {
-      console.log(error);
       throw error;
     }
   }
@@ -63,7 +62,6 @@ export class BucketService {
     try {
       await cloudinary.uploader.destroy(publicId, options);
     } catch (error) {
-      console.log(error);
       throw error;
     }
   }

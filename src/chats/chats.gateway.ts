@@ -171,7 +171,7 @@ export class ChatsGateway implements NestGateway {
     );
   }
 
-  @SubscribeMessage('handleEditMessage')
+  @SubscribeMessage('editMessage')
   async handleEditMessage(
     @ConnectedSocket() socket: Socket,
     @MessageBody() body: EditMessageRequestDto,
@@ -191,10 +191,13 @@ export class ChatsGateway implements NestGateway {
       .to(editedMessage.privateChat.id)
       .emit('editMessage', messageResponse);
 
-    return ResponseFactory.createSuccessResponse('Message edited');
+    return ResponseFactory.createSuccessResponse(
+      'Message edited',
+      messageResponse,
+    );
   }
 
-  @SubscribeMessage('sendDeleteMessage')
+  @SubscribeMessage('deleteMessage')
   async handleDeleteMessage(
     @ConnectedSocket() socket: Socket,
     @MessageBody() body: DeleteMessageRequestDto,
@@ -217,7 +220,10 @@ export class ChatsGateway implements NestGateway {
       .to(deletedMessage.privateChat.id)
       .emit('deleteMessage', messageResponse);
 
-    return ResponseFactory.createSuccessResponse('Message deleted');
+    return ResponseFactory.createSuccessResponse(
+      'Message deleted',
+      messageResponse,
+    );
   }
 
   @SubscribeMessage('sendTyping')
@@ -262,7 +268,7 @@ export class ChatsGateway implements NestGateway {
     socket.to(body.chatId).emit('stopTyping', { userId: reqUser.userId });
   }
 
-  @SubscribeMessage('sendReadReceipt')
+  @SubscribeMessage('readChat')
   async handleSendReadReceipt(
     @ConnectedSocket() socket: Socket,
     @MessageBody() body: ReadChatRequestDto,

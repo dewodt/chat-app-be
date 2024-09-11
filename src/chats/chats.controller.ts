@@ -68,7 +68,6 @@ export class ChatsController {
       );
 
     // Map to response
-    console.log(privateMessages[0]);
     const messages = ChatResponseFactory.createMessages(
       privateMessages,
       reqUser.userId,

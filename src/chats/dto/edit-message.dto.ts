@@ -5,6 +5,6 @@ export class EditMessageRequestDto {
   @IsUUID(4, { message: 'messageId must be a valid UUID' })
   messageId: string;
 
-  @IsNotEmpty({ message: 'newMessage is required' })
-  newMessage: string;
+  @IsNotEmpty({ message: 'message is required' })
+  message: string;
 }
