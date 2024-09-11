@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
+import * as cookieParser from 'cookie';
 import { Request } from 'express';
 import { Socket } from 'socket.io';
 import { ResponseFactory } from 'src/common/dto';
@@ -30,16 +31,25 @@ export class AuthService {
    * @returns
    */
   wsExtractJwtToken(socket: Socket): string | null {
+    // 1. Cookie
+    const headerCookies = socket.handshake.headers.cookie || '';
+    const parsedCookies = cookieParser.parse(headerCookies);
+    const cookieAuthToken = parsedCookies['auth-token'] as string | undefined;
+
+    // 2. Handshake auth
     const handshakeAuthToken = socket.handshake.auth['auth-token'] as
       | string
       | undefined;
 
+    // 3. Bearer
     const [bearer, headerToken] =
       socket.handshake.headers.authorization?.split(' ') || [];
     const headersAuthToken = bearer === 'Bearer' ? headerToken : undefined;
 
     let authToken: string | null = null;
-    if (handshakeAuthToken) {
+    if (cookieAuthToken) {
+      authToken = cookieAuthToken;
+    } else if (handshakeAuthToken) {
       authToken = handshakeAuthToken;
     } else if (headersAuthToken) {
       authToken = headersAuthToken;

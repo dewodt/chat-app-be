@@ -124,14 +124,14 @@ export class UsersController {
   @HttpCode(200)
   async newChat(
     @Param('id', ParseUUIDPipe) targetUserId: string,
-    @HttpReqUser() user: UserPayload,
+    @HttpReqUser() reqUser: UserPayload,
   ) {
     const { newChat } = await this.usersService.getExistingOrCreateNewChat(
-      user.userId,
+      reqUser.userId,
       targetUserId,
     );
 
-    const chat = ChatResponseFactory.createPrivateChat(newChat);
+    const chat = ChatResponseFactory.createPrivateChat(newChat, reqUser.userId);
 
     // Map response
     const responseData = ResponseFactory.createSuccessResponse(

@@ -72,7 +72,9 @@ export class WsValidationPipe
       exceptionFactory: (errors) => {
         const errorMessages = this.getErrorMessages(errors);
 
-        throw new WsException(errorMessages);
+        throw new WsException(
+          ResponseFactory.createErrorResponse(errorMessages),
+        );
       },
       ...options,
     });

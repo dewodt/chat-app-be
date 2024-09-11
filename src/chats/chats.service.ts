@@ -1,20 +1,35 @@
 import {
   DeleteMessageRequestDto,
   EditMessageRequestDto,
+  ReadChatRequestDto,
   SendMessageRequestDto,
-  SendReadReceiptRequestDto,
 } from './dto';
 import { PrivateChat, PrivateMessage } from './entities';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { WsException } from '@nestjs/websockets';
 import { UserPayload } from 'src/auth/interfaces';
 import { PaginationParams } from 'src/common/decorators';
-import { MetaDto } from 'src/common/dto';
-import { DataSource, In } from 'typeorm';
+import { MetaDto, ResponseFactory } from 'src/common/dto';
+import { User } from 'src/users/entities';
+import { DataSource, In, Not } from 'typeorm';
 
 @Injectable()
 export class ChatsService {
   constructor(private readonly dataSource: DataSource) {}
+
+  differentiateUser(user1: User, user2: User, currentUserId: string) {
+    if (user1.id === currentUserId) {
+      return {
+        currentUser: user1,
+        otherUser: user2,
+      };
+    }
+
+    return {
+      currentUser: user2,
+      otherUser: user1,
+    };
+  }
 
   async saveMessage(
     body: SendMessageRequestDto,
@@ -26,27 +41,22 @@ export class ChatsService {
       body.chatId,
     );
     if (!isAuthorized) {
-      throw new WsException('Unauthorized access');
+      throw new WsException(
+        ResponseFactory.createErrorResponse('Unauthorized access'),
+      );
     }
 
     // Save to database
     const privateMessageRepository =
       this.dataSource.getRepository(PrivateMessage);
 
-    const newMessage = privateMessageRepository.create({
+    const newMessage = await privateMessageRepository.save({
       content: body.message,
-      privateChat: privateChat,
-      sender: reqUser,
+      privateChat: { id: privateChat.id },
+      sender: { id: reqUser.userId },
     });
 
-    const insertedMessage = await privateMessageRepository.save(newMessage);
-
-    privateChat.otherUser =
-      privateChat.user1.id === reqUser.userId
-        ? privateChat.user2
-        : privateChat.user1;
-
-    return { newMessage: insertedMessage, privateChat: privateChat };
+    return { newMessage, privateChat };
   }
 
   async editMessage(
@@ -57,7 +67,9 @@ export class ChatsService {
     const { isAuthorized, privateMessage, privateChat } =
       await this.canUserAccessMessage(reqUser.userId, body.messageId);
     if (!isAuthorized) {
-      throw new WsException('Unauthorized access');
+      throw new WsException(
+        ResponseFactory.createErrorResponse('Unauthorized access'),
+      );
     }
 
     // Save to database
@@ -68,11 +80,6 @@ export class ChatsService {
     privateMessage.editedAt = new Date();
 
     const editedMessage = await privateMessageRepository.save(privateMessage);
-
-    privateChat.otherUser =
-      reqUser.userId === privateChat.user1.id
-        ? privateChat.user2
-        : privateChat.user1;
 
     return { editedMessage, privateChat };
   }
@@ -85,7 +92,9 @@ export class ChatsService {
     const { isAuthorized, privateMessage, privateChat } =
       await this.canUserAccessMessage(reqUser.userId, body.messageId);
     if (!isAuthorized) {
-      throw new WsException('Unauthorized access');
+      throw new WsException(
+        ResponseFactory.createErrorResponse('Unauthorized access'),
+      );
     }
 
     // Delete from database
@@ -94,63 +103,44 @@ export class ChatsService {
 
     await privateMessageRepository.softDelete({ id: body.messageId });
 
-    privateChat.otherUser =
-      reqUser.userId === privateChat.user1.id
-        ? privateChat.user2
-        : privateChat.user1;
-
     return {
       deletedMessage: privateMessage,
       privateChat,
     };
   }
 
-  async readMessages(body: SendReadReceiptRequestDto, reqUser: UserPayload) {
+  async readChat(body: ReadChatRequestDto, reqUser: UserPayload) {
     // Check if user is authorized
-    const { isAuthorized, privateMessages } =
-      await this.canUserAccessPrivateMessages(reqUser.userId, body.messageIds);
-
-    if (!isAuthorized) {
-      throw new WsException('Unauthorized access');
-    }
-
-    // Check if messages are not read and the sender is not the current user
-    const isValidRead = privateMessages.every(
-      (privateMessage) =>
-        !privateMessage.readAt && privateMessage.sender.id !== reqUser.userId,
+    const { isAuthorized, privateChat } = await this.canUserAccessPrivateChat(
+      reqUser.userId,
+      body.chatId,
     );
-    if (!isValidRead) {
+    if (!isAuthorized) {
       throw new WsException(
-        'Some messages are already read or your own message',
+        ResponseFactory.createErrorResponse('Unauthorized access'),
       );
     }
 
-    // Update messages
     const privateMessageRepository =
       this.dataSource.getRepository(PrivateMessage);
+    const privateMessages = await privateMessageRepository.find({
+      where: {
+        privateChat: { id: body.chatId },
+        sender: { id: Not(reqUser.userId) },
+      },
+    });
 
-    privateMessages.forEach((privateMessage) => {
+    const updatedMessages = privateMessages.map((privateMessage) => {
       privateMessage.readAt = new Date();
+      return privateMessage;
     });
 
     const updatedPrivateMessages =
-      await privateMessageRepository.save(privateMessages);
-
-    // Map messages by chat id
-    const chatIdMessagesMap = new Map<string, PrivateMessage[]>();
-    updatedPrivateMessages.forEach((privateMessage) => {
-      const chatId = privateMessage.privateChat.id;
-      const pm = chatIdMessagesMap.get(chatId);
-      if (!pm) {
-        chatIdMessagesMap.set(chatId, [privateMessage]);
-      } else {
-        pm.push(privateMessage);
-      }
-    });
+      await privateMessageRepository.save(updatedMessages);
 
     return {
-      readMessages: privateMessages,
-      chatIdMessagesMap,
+      readMessages: updatedPrivateMessages,
+      privateChat,
     };
   }
 
@@ -238,6 +228,7 @@ export class ChatsService {
             user2: { id: currentUserId },
           },
         ],
+        relations: ['user1', 'user2'],
       });
 
       const isAuthorized = privateChats.length === privateChatIds.length;
@@ -293,6 +284,7 @@ export class ChatsService {
           },
         ],
         relations: ['privateChat'],
+        withDeleted: true,
       });
 
       const isAuthorized = privateMessages.length === privateMessageIds.length;
@@ -370,14 +362,6 @@ export class ChatsService {
       pagination.page * pagination.limit,
     );
 
-    privateChats.forEach((privateChat) => {
-      if (privateChat.user1.id !== currentUserId) {
-        privateChat.otherUser = privateChat.user1;
-      } else {
-        privateChat.otherUser = privateChat.user2;
-      }
-    });
-
     const metaDto: MetaDto = {
       page: pagination.page,
       limit: pagination.limit,
@@ -398,7 +382,7 @@ export class ChatsService {
     pagination: PaginationParams,
   ) {
     // Check if user is authorized
-    const { isAuthorized } = await this.canUserAccessPrivateChat(
+    const { isAuthorized, privateChat } = await this.canUserAccessPrivateChat(
       currentUserId,
       privateChatId,
     );
@@ -418,8 +402,10 @@ export class ChatsService {
         order: {
           createdAt: 'DESC',
         },
+        withDeleted: true,
         skip: (pagination.page - 1) * pagination.limit,
         take: pagination.limit,
+        relations: ['sender'],
       });
 
     const totalPage = Math.ceil(totalData / pagination.limit);
@@ -433,6 +419,6 @@ export class ChatsService {
 
     // Note: read update is done in the websocket hanlder, not http request
 
-    return { privateMessages, metaDto };
+    return { privateChat, privateMessages, metaDto };
   }
 }

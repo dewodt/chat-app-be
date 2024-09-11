@@ -1,4 +1,5 @@
 export interface BaseResponseDto {
+  result: 'success' | 'error'; // ws don't have response status unlike http
   message: string;
 }
 
@@ -32,7 +33,11 @@ export class ResponseFactory {
     message: string,
     data: T | undefined = undefined,
   ): SuccessResponseDto<T> {
-    return { message, data };
+    return {
+      result: 'success',
+      message,
+      data,
+    };
   }
 
   static createSuccessPaginatedResponse<T>(
@@ -40,13 +45,18 @@ export class ResponseFactory {
     data: T[],
     meta: MetaDto,
   ): SuccessPaginatedResponseDto<T> {
-    return { message, data, meta };
+    return {
+      result: 'success',
+      message,
+      data,
+      meta,
+    };
   }
 
   static createErrorResponse(
     message: string,
     errorFields: ErrorFieldDto[] | undefined = undefined,
   ): ErrorResponseDto {
-    return { message, errorFields };
+    return { result: 'error', message, errorFields };
   }
 }

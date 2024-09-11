@@ -1,3 +1,4 @@
+import { ResponseFactory } from '../dto';
 import { ArgumentsHost, Catch, HttpException } from '@nestjs/common';
 import { BaseWsExceptionFilter, WsException } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
@@ -12,10 +13,13 @@ export class CustomWsExceptionsFilter extends BaseWsExceptionFilter {
 
     if (callback && typeof callback === 'function') {
       // Ack callback (doesnt emit new event, but respond to original event)
-      return callback(exception.message);
+      return callback(ResponseFactory.createErrorResponse(exception.message));
     } else {
       // Fallback: emit error event
-      socket.emit('error', exception.message);
+      socket.emit(
+        'error',
+        ResponseFactory.createErrorResponse(exception.message),
+      );
     }
   }
 }

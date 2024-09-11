@@ -150,10 +150,6 @@ export class UsersService {
             take: 25,
           });
 
-        existingPrivateChat.otherUser =
-          existingPrivateChat.user1.id === currentUserId
-            ? existingPrivateChat.user2
-            : existingPrivateChat.user1;
         existingPrivateChat.messages = privateMessages;
 
         return { newChat: existingPrivateChat };
@@ -182,10 +178,6 @@ export class UsersService {
         user2: user2,
       });
 
-      newPrivateChat.otherUser =
-        newPrivateChat.user1.id === currentUserId
-          ? newPrivateChat.user2
-          : newPrivateChat.user1;
       newPrivateChat.messages = [];
 
       return { newChat: newPrivateChat };

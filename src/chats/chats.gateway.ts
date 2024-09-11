@@ -5,7 +5,7 @@ import {
   EditMessageRequestDto,
   JoinChatRequestDto,
   SendMessageRequestDto,
-  SendReadReceiptRequestDto,
+  ReadChatRequestDto,
 } from './dto';
 import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
 import {
@@ -26,7 +26,13 @@ import { ResponseFactory } from 'src/common/dto';
 import { CustomWsExceptionsFilter } from 'src/common/exception-filters';
 import { WsValidationPipe } from 'src/common/pipes/validation.pipe';
 
-@WebSocketGateway()
+@WebSocketGateway({
+  cors: {
+    origin: process.env.CLIENT_URL,
+    methods: 'GET,POST',
+    credentials: true,
+  },
+})
 @UseFilters(CustomWsExceptionsFilter)
 @UsePipes(WsValidationPipe)
 @UseGuards(WsJwtGuard)
@@ -49,13 +55,21 @@ export class ChatsGateway implements NestGateway {
     // Validate socket connection
     const authToken = this.authService.wsExtractJwtToken(socket);
     if (!authToken) {
-      throw new WsException('Unauthorized access: No token provided');
+      throw new WsException(
+        ResponseFactory.createErrorResponse(
+          'Unauthorized access: No token provided',
+        ),
+      );
     }
 
     // Validate jwt
     const userPayload = await this.authService.verifyJwt(authToken);
     if (!userPayload) {
-      throw new WsException('Unauthorized access: Invalid token');
+      throw new WsException(
+        ResponseFactory.createErrorResponse(
+          'Unauthorized access: Invalid token',
+        ),
+      );
     }
 
     // Attach user payload to socket
@@ -90,15 +104,8 @@ export class ChatsGateway implements NestGateway {
     );
   }
 
-  // @SubscribeMessage('message')
-  // handleMessage(@MessageBody() data: string): string {
-  //   throw new WsException('Unauthorized access');
-
-  //   return data;
-  // }
-
   @SubscribeMessage('joinChatRooms')
-  async handleJoinChatRoom(
+  async handleJoinChatRooms(
     @ConnectedSocket() socket: Socket,
     @MessageBody() body: JoinChatRequestDto,
     @WsReqUser() reqUser: UserPayload,
@@ -109,7 +116,9 @@ export class ChatsGateway implements NestGateway {
       body.chatIds,
     );
     if (!isAuthorized) {
-      throw new WsException('Unauthorized access');
+      throw new WsException(
+        ResponseFactory.createErrorResponse('Unauthorized access'),
+      );
     }
 
     // Join chat room
@@ -125,14 +134,23 @@ export class ChatsGateway implements NestGateway {
     @WsReqUser() reqUser: UserPayload,
   ) {
     // Validate sender & Save message
-    const { newMessage } = await this.chatService.saveMessage(body, reqUser);
+    const { newMessage, privateChat } = await this.chatService.saveMessage(
+      body,
+      reqUser,
+    );
+    const { otherUser } = this.chatService.differentiateUser(
+      privateChat.user1,
+      privateChat.user2,
+      reqUser.userId,
+    );
 
     // Map to response
-    const messageResponse = ChatResponseFactory.createMessage(newMessage);
-
-    const otherUserSockets = this.userSocketsMap.get(
-      newMessage.privateChat.otherUser.id,
+    const messageResponse = ChatResponseFactory.createMessage(
+      newMessage,
+      reqUser.userId,
     );
+
+    const otherUserSockets = this.userSocketsMap.get(otherUser.id);
 
     if (otherUserSockets) {
       // User online
@@ -147,7 +165,10 @@ export class ChatsGateway implements NestGateway {
     // Send message to other users except current socket id
     socket.to(body.chatId).emit('newMessage', messageResponse);
 
-    return ResponseFactory.createSuccessResponse('Message sent');
+    return ResponseFactory.createSuccessResponse(
+      'Message sent',
+      messageResponse,
+    );
   }
 
   @SubscribeMessage('handleEditMessage')
@@ -160,7 +181,10 @@ export class ChatsGateway implements NestGateway {
     const { editedMessage } = await this.chatService.editMessage(body, reqUser);
 
     // Map to response
-    const messageResponse = ChatResponseFactory.createMessage(editedMessage);
+    const messageResponse = ChatResponseFactory.createMessage(
+      editedMessage,
+      reqUser.userId,
+    );
 
     // Send edit message to other users
     socket
@@ -183,7 +207,10 @@ export class ChatsGateway implements NestGateway {
     );
 
     // Map to response
-    const messageResponse = ChatResponseFactory.createMessage(deletedMessage);
+    const messageResponse = ChatResponseFactory.createMessage(
+      deletedMessage,
+      reqUser.userId,
+    );
 
     // Send delete message to other users
     socket
@@ -205,7 +232,9 @@ export class ChatsGateway implements NestGateway {
       body.chatId,
     );
     if (!isAuthorized) {
-      throw new WsException('Unauthorized access');
+      throw new WsException(
+        ResponseFactory.createErrorResponse('Unauthorized access'),
+      );
     }
 
     // Send typing
@@ -224,7 +253,9 @@ export class ChatsGateway implements NestGateway {
       body.chatId,
     );
     if (!isAuthorized) {
-      throw new WsException('Unauthorized access');
+      throw new WsException(
+        ResponseFactory.createErrorResponse('Unauthorized access'),
+      );
     }
 
     // Send stop typing
@@ -234,20 +265,19 @@ export class ChatsGateway implements NestGateway {
   @SubscribeMessage('sendReadReceipt')
   async handleSendReadReceipt(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() body: SendReadReceiptRequestDto,
+    @MessageBody() body: ReadChatRequestDto,
     @WsReqUser() reqUser: UserPayload,
   ) {
     // Validate sender & Send read receipt
-    const { chatIdMessagesMap } = await this.chatService.readMessages(
+    const { privateChat, readMessages } = await this.chatService.readChat(
       body,
       reqUser,
     );
 
     // Send to other users
-    for (const [chatId, messages] of chatIdMessagesMap.entries()) {
-      const messageIds = messages.map((message) => message.id);
-      socket.to(chatId).emit('readReceipt', { messageIds });
-    }
+    socket.to(privateChat.id).emit('readReceipt', {
+      messageIds: readMessages.map((message) => message.id),
+    });
 
     return ResponseFactory.createSuccessResponse('Read receipt sent');
   }
