@@ -68,10 +68,7 @@ export class ChatsController {
       );
 
     // Map to response
-    const messages = ChatResponseFactory.createMessages(
-      privateMessages,
-      reqUser.userId,
-    );
+    const messages = ChatResponseFactory.createMessages(privateMessages);
     const responseData = ResponseFactory.createSuccessPaginatedResponse(
       'Chat messages fetched successfully',
       messages,

@@ -20,16 +20,21 @@ export class UsersService {
     private readonly bucketService: BucketService,
   ) {}
 
-  async findMatchingUser(
+  async findMatchingUserWithoutCurrentUser(
     usernameQuery: string | undefined,
+    currentUserId: string,
     pagination: PaginationParams,
   ) {
     const userRepository = this.dataSource.getRepository(User);
-    let queryBuilder = userRepository.createQueryBuilder('user');
+    let queryBuilder = userRepository
+      .createQueryBuilder('user')
+      .where('(user.id <> :currentUserId)', {
+        currentUserId,
+      });
 
     // Apply username filter
     if (usernameQuery) {
-      queryBuilder = queryBuilder.where('user.username ILIKE :username', {
+      queryBuilder = queryBuilder.andWhere('(user.username ILIKE :username)', {
         username: `%${usernameQuery}%`,
       });
     }

@@ -136,7 +136,7 @@ export class ChatsGateway implements NestGateway {
     // Validate sender & Save message
     const { newMessage, privateChat } = await this.chatService.saveMessage(
       body,
-      reqUser,
+      reqUser.userId,
     );
 
     const { otherUser, currentUser } = this.chatService.differentiateUser(
@@ -225,7 +225,7 @@ export class ChatsGateway implements NestGateway {
     // Validate sender & Edit message
     const { editedMessage, privateChat } = await this.chatService.editMessage(
       body,
-      reqUser,
+      reqUser.userId,
     );
 
     // Map to response
@@ -250,7 +250,7 @@ export class ChatsGateway implements NestGateway {
   ) {
     // Validate sender & Delete message
     const { deletedMessage, privateChat } =
-      await this.chatService.deleteMessage(body, reqUser);
+      await this.chatService.deleteMessage(body, reqUser.userId);
 
     // Map to response
     const response = ResponseFactory.createSuccessResponse('Message deleted', {
@@ -316,7 +316,7 @@ export class ChatsGateway implements NestGateway {
     // Validate sender & Send read receipt
     const { privateChat, readMessages } = await this.chatService.readChat(
       body,
-      reqUser,
+      reqUser.userId,
     );
 
     // Send to other users

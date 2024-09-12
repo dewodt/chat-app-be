@@ -11,7 +11,6 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { WsException } from '@nestjs/websockets';
-import { UserPayload } from 'src/auth/interfaces';
 import { PaginationParams } from 'src/common/decorators';
 import { MetaDto, ResponseFactory } from 'src/common/dto';
 import { User } from 'src/users/entities';
@@ -51,11 +50,11 @@ export class ChatsService {
 
   async saveMessage(
     body: SendMessageRequestDto,
-    reqUser: UserPayload,
+    currentUserId: string,
   ): Promise<{ newMessage: PrivateMessage; privateChat: PrivateChat }> {
     // Check if user is authorized
     const { isAuthorized, privateChat } = await this.canUserAccessPrivateChat(
-      reqUser.userId,
+      currentUserId,
       body.chatId,
     );
     if (!isAuthorized) {
@@ -71,7 +70,7 @@ export class ChatsService {
     const newMessage = await privateMessageRepository.save({
       content: body.message,
       privateChat: { id: privateChat.id },
-      sender: { id: reqUser.userId },
+      sender: { id: currentUserId },
     });
 
     newMessage.privateChat = privateChat;
@@ -82,11 +81,11 @@ export class ChatsService {
 
   async editMessage(
     body: EditMessageRequestDto,
-    reqUser: UserPayload,
+    currentUserId: string,
   ): Promise<{ editedMessage: PrivateMessage; privateChat: PrivateChat }> {
     // Check if user is authorized
     const { isAuthorized, privateMessage, privateChat } =
-      await this.canUserAccessMessage(reqUser.userId, body.messageId);
+      await this.canUserAccessMessage(currentUserId, body.messageId);
     if (!isAuthorized) {
       throw new WsException(
         ResponseFactory.createErrorResponse('Unauthorized access'),
@@ -108,11 +107,11 @@ export class ChatsService {
 
   async deleteMessage(
     body: DeleteMessageRequestDto,
-    reqUser: UserPayload,
+    currentUserId: string,
   ): Promise<{ deletedMessage: PrivateMessage; privateChat: PrivateChat }> {
     // Check if user is authorized
     const { isAuthorized, privateMessage, privateChat } =
-      await this.canUserAccessMessage(reqUser.userId, body.messageId);
+      await this.canUserAccessMessage(currentUserId, body.messageId);
     if (!isAuthorized) {
       throw new WsException(
         ResponseFactory.createErrorResponse('Unauthorized access'),
@@ -132,10 +131,10 @@ export class ChatsService {
     };
   }
 
-  async readChat(body: ReadChatRequestDto, reqUser: UserPayload) {
+  async readChat(body: ReadChatRequestDto, currentUserId: string) {
     // Check if user is authorized
     const { isAuthorized, privateChat } = await this.canUserAccessPrivateChat(
-      reqUser.userId,
+      currentUserId,
       body.chatId,
     );
     if (!isAuthorized) {
@@ -149,7 +148,7 @@ export class ChatsService {
     const privateMessages = await privateMessageRepository.find({
       where: {
         privateChat: { id: body.chatId },
-        sender: { id: Not(reqUser.userId) },
+        sender: { id: Not(currentUserId) },
       },
     });
 
@@ -384,7 +383,8 @@ export class ChatsService {
       .leftJoinAndSelect('privateChat.user1', 'user1')
       .leftJoinAndSelect('privateChat.user2', 'user2')
       .withDeleted()
-      .leftJoinAndMapOne(
+      .innerJoinAndMapOne(
+        // Only privatechat that already have atleast 1 message
         'privateChat.latestMessage',
         'privateChat.messages',
         'latestMessage',

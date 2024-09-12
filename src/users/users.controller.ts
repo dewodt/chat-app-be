@@ -41,13 +41,16 @@ export class UsersController {
   @HttpCode(200)
   async findAll(
     @Query('username') username: string | undefined,
+    @HttpReqUser() reqUser: UserPayload,
     @Pagination({ defaultLimit: 15 }) pagination: PaginationParams,
   ) {
     // Find users
-    const { users, meta } = await this.usersService.findMatchingUser(
-      username,
-      pagination,
-    );
+    const { users, meta } =
+      await this.usersService.findMatchingUserWithoutCurrentUser(
+        username,
+        reqUser.userId,
+        pagination,
+      );
 
     // Map user to dto
     const usersDto = UserResponseFactory.createUserDtoList(users);
