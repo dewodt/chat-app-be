@@ -9,7 +9,6 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { BucketService } from 'src/bucket/bucket.service';
-import { PrivateChat, PrivateMessage } from 'src/chats/entities';
 import { PaginationParams } from 'src/common/decorators';
 import { MetaDto, ResponseFactory } from 'src/common/dto';
 import { DataSource, QueryFailedError } from 'typeorm';
@@ -113,79 +112,6 @@ export class UsersService {
           ResponseFactory.createErrorResponse('Failed to update profile data'),
         );
       }
-    }
-  }
-
-  async getExistingOrCreateNewChat(
-    currentUserId: string,
-    targetUserId: string,
-  ) {
-    if (currentUserId === targetUserId) {
-      throw new BadRequestException(
-        ResponseFactory.createErrorResponse('Cannot chat with yourself'),
-      );
-    }
-
-    const userRepository = this.dataSource.getRepository(User);
-    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
-
-    const user1Id =
-      currentUserId <= targetUserId ? currentUserId : targetUserId;
-    const user2Id =
-      currentUserId <= targetUserId ? targetUserId : currentUserId;
-
-    // Check if chat already exists
-    try {
-      const existingPrivateChat = await privateChatRepository.findOne({
-        where: { user1: { id: user1Id }, user2: { id: user2Id } },
-        relations: ['user1', 'user2'],
-      });
-      if (existingPrivateChat) {
-        // Get messages (last 25)
-        const privateMessages = await this.dataSource
-          .getRepository(PrivateMessage)
-          .find({
-            where: { privateChat: { id: existingPrivateChat.id } },
-            order: { createdAt: 'DESC' },
-            take: 25,
-          });
-
-        existingPrivateChat.messages = privateMessages;
-
-        return { newChat: existingPrivateChat };
-      }
-    } catch (error) {
-      // Other errors
-      throw new InternalServerErrorException(
-        ResponseFactory.createErrorResponse('Failed to get chat data'),
-      );
-    }
-
-    const [user1, user2] = await Promise.all([
-      userRepository.findOne({ where: { id: user1Id } }),
-      userRepository.findOne({ where: { id: user2Id } }),
-    ]);
-    if (!user1 || !user2) {
-      throw new BadRequestException(
-        ResponseFactory.createErrorResponse('User not found'),
-      );
-    }
-
-    try {
-      // Create new chat
-      const newPrivateChat = await privateChatRepository.save({
-        user1: user1,
-        user2: user2,
-      });
-
-      newPrivateChat.messages = [];
-
-      return { newChat: newPrivateChat };
-    } catch (error) {
-      // Other errors
-      throw new InternalServerErrorException(
-        ResponseFactory.createErrorResponse('Failed to create chat data'),
-      );
     }
   }
 }

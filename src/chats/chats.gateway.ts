@@ -138,37 +138,82 @@ export class ChatsGateway implements NestGateway {
       body,
       reqUser,
     );
-    const { otherUser } = this.chatService.differentiateUser(
+
+    const { otherUser, currentUser } = this.chatService.differentiateUser(
       privateChat.user1,
       privateChat.user2,
       reqUser.userId,
     );
 
+    // Get unread count for both users
+    const [unreadCountCurrentUser, unreadCountOtherUser] = await Promise.all([
+      this.chatService.getPrivateChatUnreadCount(
+        privateChat.id,
+        currentUser.id,
+      ),
+      this.chatService.getPrivateChatUnreadCount(privateChat.id, otherUser.id),
+    ]);
+
+    const privateChatCurrentUser = {
+      ...privateChat,
+      unreadCount: unreadCountCurrentUser,
+    };
+    const privateChatOtherUser = {
+      ...privateChat,
+      unreadCount: unreadCountOtherUser,
+    };
+
     // Map to response
-    const messageResponse = ChatResponseFactory.createMessage(
-      newMessage,
-      reqUser.userId,
+    const messageResponse = ChatResponseFactory.createMessage(newMessage);
+
+    // Current user
+    const chatInboxResponseToCurrentUser =
+      ChatResponseFactory.createPrivateChatInbox(
+        privateChatCurrentUser,
+        currentUser.id,
+      );
+
+    const responseCurrentUser = ResponseFactory.createSuccessResponse(
+      'Message sent',
+      {
+        message: messageResponse,
+        chatInbox: chatInboxResponseToCurrentUser,
+      },
+    );
+
+    // Other user
+    const chatInboxResponseToOtherUser =
+      ChatResponseFactory.createPrivateChatInbox(
+        privateChatOtherUser,
+        otherUser.id,
+      );
+
+    const responseOtherUser = ResponseFactory.createSuccessResponse(
+      'Message received',
+      {
+        message: messageResponse,
+        chatInbox: chatInboxResponseToOtherUser,
+      },
     );
 
     const otherUserSockets = this.userSocketsMap.get(otherUser.id);
-
     if (otherUserSockets) {
-      // User online
+      // Other user online
       otherUserSockets.forEach((socketId) => {
         // But socket id not in chat room
         if (!socket.rooms.has(socketId)) {
-          socket.join(socketId);
+          const socketInstance = this.server.sockets.sockets.get(socketId);
+          if (socketInstance) {
+            socketInstance.join(privateChat.id);
+          }
         }
       });
     }
 
     // Send message to other users except current socket id
-    socket.to(body.chatId).emit('newMessage', messageResponse);
+    socket.to(body.chatId).emit('newMessage', responseOtherUser);
 
-    return ResponseFactory.createSuccessResponse(
-      'Message sent',
-      messageResponse,
-    );
+    return responseCurrentUser;
   }
 
   @SubscribeMessage('editMessage')
@@ -178,23 +223,23 @@ export class ChatsGateway implements NestGateway {
     @WsReqUser() reqUser: UserPayload,
   ) {
     // Validate sender & Edit message
-    const { editedMessage } = await this.chatService.editMessage(body, reqUser);
+    const { editedMessage, privateChat } = await this.chatService.editMessage(
+      body,
+      reqUser,
+    );
 
     // Map to response
-    const messageResponse = ChatResponseFactory.createMessage(
-      editedMessage,
-      reqUser.userId,
-    );
+    const response = ResponseFactory.createSuccessResponse('Message edited', {
+      chatId: privateChat.id,
+      messageId: editedMessage.id,
+      newMessage: editedMessage.content,
+      editedAt: editedMessage.editedAt,
+    });
 
     // Send edit message to other users
-    socket
-      .to(editedMessage.privateChat.id)
-      .emit('editMessage', messageResponse);
+    socket.to(editedMessage.privateChat.id).emit('newEditMessage', response);
 
-    return ResponseFactory.createSuccessResponse(
-      'Message edited',
-      messageResponse,
-    );
+    return response;
   }
 
   @SubscribeMessage('deleteMessage')
@@ -204,26 +249,20 @@ export class ChatsGateway implements NestGateway {
     @WsReqUser() reqUser: UserPayload,
   ) {
     // Validate sender & Delete message
-    const { deletedMessage } = await this.chatService.deleteMessage(
-      body,
-      reqUser,
-    );
+    const { deletedMessage, privateChat } =
+      await this.chatService.deleteMessage(body, reqUser);
 
     // Map to response
-    const messageResponse = ChatResponseFactory.createMessage(
-      deletedMessage,
-      reqUser.userId,
-    );
+    const response = ResponseFactory.createSuccessResponse('Message deleted', {
+      chatId: privateChat.id,
+      messageId: deletedMessage.id,
+      deletedAt: deletedMessage.deletedAt,
+    });
 
     // Send delete message to other users
-    socket
-      .to(deletedMessage.privateChat.id)
-      .emit('deleteMessage', messageResponse);
+    socket.to(deletedMessage.privateChat.id).emit('newDeleteMessage', response);
 
-    return ResponseFactory.createSuccessResponse(
-      'Message deleted',
-      messageResponse,
-    );
+    return response;
   }
 
   @SubscribeMessage('sendTyping')

@@ -1,24 +1,25 @@
 import { ChatType, PrivateChat, PrivateMessage } from '../entities';
 
-export interface ChatInbox {
+export interface ChatInboxDto {
   chatId: string;
   type: ChatType;
   title: string;
   avatarUrl: string | null;
   unreadCount: number;
   lastMessage: {
+    messageId: string;
     content: string | null;
     createdAt: Date;
     deletedAt: Date | null;
-  };
+  } | null;
 }
 
-export interface Message {
+export interface MessageDto {
   messageId: string;
   chatId: string;
   content: string | null;
   editedAt: Date | null;
-  isCurrentUserSender: boolean;
+  senderId: string;
   readAt: Date | null;
   createdAt: Date;
   deletedAt: Date | null;
@@ -28,7 +29,7 @@ export class ChatResponseFactory {
   static createPrivateChatInbox(
     privateChat: PrivateChat,
     currentUserId: string,
-  ) {
+  ): ChatInboxDto {
     const otherUser =
       privateChat.user1.id === currentUserId
         ? privateChat.user2
@@ -40,7 +41,8 @@ export class ChatResponseFactory {
       title: otherUser.username,
       avatarUrl: otherUser.avatarUrl,
       unreadCount: privateChat.unreadCount,
-      lastMessage: {
+      lastMessage: privateChat.latestMessage && {
+        messageId: privateChat.latestMessage.id,
         content: privateChat.latestMessage.deletedAt
           ? null
           : privateChat.latestMessage.content,
@@ -50,10 +52,7 @@ export class ChatResponseFactory {
     };
   }
 
-  static createMessage(
-    message: PrivateMessage,
-    currentUserId: string,
-  ): Message {
+  static createMessage(message: PrivateMessage): MessageDto {
     return {
       messageId: message.id,
       chatId: message.privateChat.id,
@@ -62,24 +61,7 @@ export class ChatResponseFactory {
       editedAt: message.editedAt,
       readAt: message.readAt,
       deletedAt: message.deletedAt,
-      isCurrentUserSender: message.sender.id === currentUserId,
-    };
-  }
-
-  static createPrivateChat(privateChat: PrivateChat, currentUserId: string) {
-    const otherUser =
-      privateChat.user1.id === currentUserId
-        ? privateChat.user2
-        : privateChat.user1;
-
-    return {
-      chatId: privateChat.id,
-      type: ChatType.PRIVATE,
-      title: otherUser.username,
-      avatarUrl: otherUser.avatarUrl,
-      messages: (privateChat.messages || []).map((message) =>
-        ChatResponseFactory.createMessage(message, currentUserId),
-      ),
+      senderId: message.sender.id,
     };
   }
 
@@ -92,9 +74,9 @@ export class ChatResponseFactory {
     );
   }
 
-  static createMessages(messages: PrivateMessage[], currentUserId: string) {
+  static createMessages(messages: PrivateMessage[]) {
     return messages.map((message) =>
-      ChatResponseFactory.createMessage(message, currentUserId),
+      ChatResponseFactory.createMessage(message),
     );
   }
 }

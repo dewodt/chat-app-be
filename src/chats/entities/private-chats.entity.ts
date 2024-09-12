@@ -42,6 +42,6 @@ export class PrivateChat {
   messages: PrivateMessage[];
 
   // Aditional field from query
-  latestMessage: PrivateMessage;
+  latestMessage: PrivateMessage | null; // null if no message exists
   unreadCount: number;
 }

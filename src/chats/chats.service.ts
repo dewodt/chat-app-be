@@ -5,13 +5,17 @@ import {
   SendMessageRequestDto,
 } from './dto';
 import { PrivateChat, PrivateMessage } from './entities';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { WsException } from '@nestjs/websockets';
 import { UserPayload } from 'src/auth/interfaces';
 import { PaginationParams } from 'src/common/decorators';
 import { MetaDto, ResponseFactory } from 'src/common/dto';
 import { User } from 'src/users/entities';
-import { DataSource, In, Not } from 'typeorm';
+import { DataSource, In, IsNull, Not, QueryFailedError } from 'typeorm';
 
 @Injectable()
 export class ChatsService {
@@ -29,6 +33,20 @@ export class ChatsService {
       currentUser: user2,
       otherUser: user1,
     };
+  }
+
+  differentiateUserId(randomUserId1: string, randomUserId2: string) {
+    if (randomUserId1 < randomUserId2) {
+      return {
+        user1Id: randomUserId1,
+        user2Id: randomUserId2,
+      };
+    } else {
+      return {
+        user1Id: randomUserId2,
+        user2Id: randomUserId1,
+      };
+    }
   }
 
   async saveMessage(
@@ -57,6 +75,7 @@ export class ChatsService {
     });
 
     newMessage.privateChat = privateChat;
+    privateChat.latestMessage = newMessage;
 
     return { newMessage, privateChat };
   }
@@ -312,6 +331,33 @@ export class ChatsService {
     }
   }
 
+  async getPrivateChatUnreadCount(chatId: string, currentUserId: string) {
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+
+    const unreadCount = await privateMessageRepository.count({
+      where: {
+        privateChat: { id: chatId },
+        sender: { id: Not(currentUserId) },
+        readAt: IsNull(),
+      },
+    });
+
+    return unreadCount;
+  }
+
+  async getLatestMessage(chatId: string) {
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
+
+    const latestMessage = await privateMessageRepository.findOne({
+      where: { privateChat: { id: chatId } },
+      order: { createdAt: 'DESC' },
+    });
+
+    return latestMessage;
+  }
+
   async getPrivateChatInbox(
     currentUserId: string,
     title: string | undefined,
@@ -428,5 +474,84 @@ export class ChatsService {
     // Note: read update is done in the websocket hanlder, not http request
 
     return { privateChat, privateMessages, metaDto };
+  }
+
+  /**
+   * Creates a new private chat if doesnt exists
+   * Or returns existing private chat
+   *
+   * @param currentUserId
+   * @param targetUserId
+   * @returns
+   */
+  async getExistingOrCreateNewChat(
+    currentUserId: string,
+    targetUserId: string,
+  ) {
+    if (currentUserId === targetUserId) {
+      throw new BadRequestException(
+        ResponseFactory.createErrorResponse('Cannot chat with yourself'),
+      );
+    }
+
+    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
+
+    const { user1Id, user2Id } = this.differentiateUserId(
+      currentUserId,
+      targetUserId,
+    );
+
+    // Check if chat already exists
+    try {
+      const existingPrivateChat = await privateChatRepository.findOne({
+        where: { user1: { id: user1Id }, user2: { id: user2Id } },
+        relations: ['user1', 'user2'],
+      });
+
+      if (existingPrivateChat) {
+        // Get last message and unread count
+        const [latestMessage, unreadCount] = await Promise.all([
+          this.getLatestMessage(existingPrivateChat.id),
+          this.getPrivateChatUnreadCount(existingPrivateChat.id, currentUserId),
+        ]);
+
+        existingPrivateChat.latestMessage = latestMessage;
+        existingPrivateChat.unreadCount = unreadCount;
+
+        return { newOrExistingChat: existingPrivateChat };
+      }
+    } catch (error) {
+      // Other errors
+      throw new InternalServerErrorException(
+        ResponseFactory.createErrorResponse('Failed to get chat data'),
+      );
+    }
+
+    // Chat doesnt exists
+    try {
+      const newPrivateChat = await privateChatRepository.save({
+        user1: { id: user1Id },
+        user2: { id: user2Id },
+      });
+      newPrivateChat.messages = [];
+      newPrivateChat.unreadCount = 0;
+
+      return { newOrExistingChat: newPrivateChat };
+    } catch (error) {
+      // Foreign key constraint error
+      if (
+        error instanceof QueryFailedError &&
+        error.driverError.code === '23503'
+      ) {
+        throw new BadRequestException(
+          ResponseFactory.createErrorResponse('User not found'),
+        );
+      }
+
+      // Other errors
+      throw new InternalServerErrorException(
+        ResponseFactory.createErrorResponse('Failed to create chat data'),
+      );
+    }
   }
 }

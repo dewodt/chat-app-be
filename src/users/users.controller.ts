@@ -20,6 +20,7 @@ import {
 import { FormDataRequest } from 'nestjs-form-data';
 import { HttpJwtGuard } from 'src/auth/guards';
 import { UserPayload } from 'src/auth/interfaces';
+import { ChatsService } from 'src/chats/chats.service';
 import { ChatResponseFactory } from 'src/chats/dto';
 import {
   HttpReqUser,
@@ -31,7 +32,10 @@ import { ResponseFactory } from 'src/common/dto';
 @Controller('users')
 @UseGuards(HttpJwtGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly chatService: ChatsService,
+  ) {}
 
   @Get()
   @HttpCode(200)
@@ -120,23 +124,27 @@ export class UsersController {
   }
 
   // Get existing chat (if any) or create new chat
-  @Post(':id/chats')
+  @Put(':id/chats')
   @HttpCode(200)
   async newChat(
     @Param('id', ParseUUIDPipe) targetUserId: string,
     @HttpReqUser() reqUser: UserPayload,
   ) {
-    const { newChat } = await this.usersService.getExistingOrCreateNewChat(
-      reqUser.userId,
-      targetUserId,
-    );
+    const { newOrExistingChat } =
+      await this.chatService.getExistingOrCreateNewChat(
+        reqUser.userId,
+        targetUserId,
+      );
 
-    const chat = ChatResponseFactory.createPrivateChat(newChat, reqUser.userId);
+    const chatInboxResponse = ChatResponseFactory.createPrivateChatInbox(
+      newOrExistingChat,
+      reqUser.userId,
+    );
 
     // Map response
     const responseData = ResponseFactory.createSuccessResponse(
       'Get existing or created new chat successfully',
-      chat,
+      chatInboxResponse,
     );
 
     // Return response
