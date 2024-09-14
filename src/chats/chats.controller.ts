@@ -1,5 +1,4 @@
 import { ChatsService } from './chats.service';
-import { ChatResponseFactory } from './dto/chat.dto';
 import {
   Controller,
   Get,
@@ -11,12 +10,8 @@ import {
 } from '@nestjs/common';
 import { HttpJwtGuard } from 'src/auth/guards';
 import { UserPayload } from 'src/auth/interfaces';
-import {
-  Pagination,
-  PaginationParams,
-  HttpReqUser,
-} from 'src/common/decorators';
-import { ResponseFactory } from 'src/common/dto';
+import { HttpReqUser, CursorPagination } from 'src/common/decorators';
+import { CursorPaginationRequestQuery, ResponseFactory } from 'src/common/dto';
 
 @Controller('chats')
 @UseGuards(HttpJwtGuard)
@@ -27,29 +22,24 @@ export class ChatsController {
   async getChatInbox(
     @HttpReqUser() reqUser: UserPayload,
     @Query('title') title: string | undefined,
-    @Pagination({ defaultLimit: 15 }) pagination: PaginationParams,
+    @CursorPagination({ defaultLimit: 15 })
+    pagination: CursorPaginationRequestQuery,
   ) {
     // Private
-    const { privateChats, metaDto } =
-      await this.chatsService.getPrivateChatInbox(
+    const { privateChatInboxesDto, metaDto } =
+      await this.chatsService.getPrivateChatInboxes(
         reqUser.userId,
         title,
         pagination,
       );
 
-    // Map to response
-    const chatInboxes = ChatResponseFactory.createPrivateChatInboxes(
-      privateChats,
-      reqUser.userId,
-    );
-
-    const responseData = ResponseFactory.createSuccessPaginatedResponse(
+    const response = ResponseFactory.createSuccessCursorPaginatedResponse(
       'Chat inboxes fetched successfully',
-      chatInboxes,
+      privateChatInboxesDto,
       metaDto,
     );
 
-    return responseData;
+    return response;
   }
 
   @Get(':id/messages')
@@ -57,24 +47,24 @@ export class ChatsController {
   async getChatMessages(
     @HttpReqUser() reqUser: UserPayload,
     @Param('id', ParseUUIDPipe) chatId: string,
-    @Pagination({ defaultLimit: 25 }) pagination: PaginationParams,
+    @CursorPagination({ defaultLimit: 25 })
+    pagination: CursorPaginationRequestQuery,
   ) {
     // Get private chat messages
-    const { privateMessages, metaDto } =
+    const { messagesDto, metaDto } =
       await this.chatsService.getPrivateChatMessage(
         reqUser.userId,
         chatId,
         pagination,
       );
 
-    // Map to response
-    const messages = ChatResponseFactory.createMessages(privateMessages);
-    const responseData = ResponseFactory.createSuccessPaginatedResponse(
+    // // Map to response
+    const response = ResponseFactory.createSuccessCursorPaginatedResponse(
       'Chat messages fetched successfully',
-      messages,
+      messagesDto,
       metaDto,
     );
 
-    return responseData;
+    return response;
   }
 }

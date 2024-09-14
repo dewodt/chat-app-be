@@ -1,6 +1,7 @@
 import { PrivateMessage } from './private-messages.entity';
 import { User } from 'src/users/entities';
 import {
+  Column,
   CreateDateColumn,
   Entity,
   Index,
@@ -27,9 +28,17 @@ export class PrivateChat {
   })
   updatedAt: Date;
 
+  @Column('uuid', { name: 'user1_id' })
+  @Index()
+  user1Id: string;
+
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'user1_id' })
   user1: User;
+
+  @Column('uuid', { name: 'user2_id' })
+  @Index()
+  user2Id: string;
 
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'user2_id' })
@@ -40,8 +49,4 @@ export class PrivateChat {
     (privateMessage) => privateMessage.privateChat,
   )
   messages: PrivateMessage[];
-
-  // Aditional field from query
-  latestMessage: PrivateMessage | null; // null if no message exists
-  unreadCount: number;
 }

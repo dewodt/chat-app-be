@@ -1,12 +1,11 @@
-import { ChatType, PrivateChat, PrivateMessage } from '../entities';
+import { PrivateMessage } from '../entities';
 
 export interface ChatInboxDto {
   chatId: string;
-  type: ChatType;
   title: string;
   avatarUrl: string | null;
   unreadCount: number;
-  lastMessage: {
+  latestMessage: {
     messageId: string;
     content: string | null;
     createdAt: Date;
@@ -26,52 +25,17 @@ export interface MessageDto {
 }
 
 export class ChatResponseFactory {
-  static createPrivateChatInbox(
-    privateChat: PrivateChat,
-    currentUserId: string,
-  ): ChatInboxDto {
-    const otherUser =
-      privateChat.user1.id === currentUserId
-        ? privateChat.user2
-        : privateChat.user1;
-
-    return {
-      chatId: privateChat.id,
-      type: ChatType.PRIVATE,
-      title: otherUser.username,
-      avatarUrl: otherUser.avatarUrl,
-      unreadCount: privateChat.unreadCount,
-      lastMessage: privateChat.latestMessage && {
-        messageId: privateChat.latestMessage.id,
-        content: privateChat.latestMessage.deletedAt
-          ? null
-          : privateChat.latestMessage.content,
-        createdAt: privateChat.latestMessage.createdAt,
-        deletedAt: privateChat.latestMessage.deletedAt,
-      },
-    };
-  }
-
   static createMessage(message: PrivateMessage): MessageDto {
     return {
       messageId: message.id,
-      chatId: message.privateChat.id,
+      chatId: message.privateChatId,
       content: message.deletedAt ? null : message.content,
       createdAt: message.createdAt,
       editedAt: message.editedAt,
       readAt: message.readAt,
       deletedAt: message.deletedAt,
-      senderId: message.sender.id,
+      senderId: message.senderId,
     };
-  }
-
-  static createPrivateChatInboxes(
-    privateChats: PrivateChat[],
-    currentUserId: string,
-  ) {
-    return privateChats.map((privateChat) =>
-      ChatResponseFactory.createPrivateChatInbox(privateChat, currentUserId),
-    );
   }
 
   static createMessages(messages: PrivateMessage[]) {

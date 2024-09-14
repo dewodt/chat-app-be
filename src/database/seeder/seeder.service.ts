@@ -46,7 +46,6 @@ export class SeederService {
     });
     generatedUsers.push(customUser);
 
-    // For each user, generate 30-40 private chats
     for (const user of generatedUsers) {
       const usersWithoutSelf = generatedUsers.filter((u) => u.id !== user.id);
       generatedPrivateChats.forEach((pc) => {

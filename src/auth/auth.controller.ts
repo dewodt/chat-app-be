@@ -51,7 +51,7 @@ export class AuthController {
       sameSite: 'strict',
     });
 
-    return ResponseFactory.createSuccessResponse(
+    return ResponseFactory.createSuccessResponseWithData(
       'Sign in success',
       responseData,
     );
@@ -86,7 +86,7 @@ export class AuthController {
     };
 
     // Return response
-    return ResponseFactory.createSuccessResponse(
+    return ResponseFactory.createSuccessResponseWithData(
       'Get session success',
       responseData,
     );

@@ -51,13 +51,19 @@ export class PrivateMessage {
   })
   deletedAt: Date | null;
 
+  @Column('uuid', { name: 'private_chat_id' })
+  @Index()
+  privateChatId: string;
+
   @ManyToOne(() => PrivateChat, (privateChat) => privateChat.id)
   @JoinColumn({ name: 'private_chat_id' })
-  @Index()
   privateChat: PrivateChat;
+
+  @Column('uuid', { name: 'sender_id' })
+  @Index()
+  senderId: string;
 
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'sender_id' })
-  @Index()
   sender: User;
 }

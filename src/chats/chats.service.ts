@@ -1,6 +1,8 @@
 import {
+  ChatInboxDto,
   DeleteMessageRequestDto,
   EditMessageRequestDto,
+  MessageDto,
   ReadChatRequestDto,
   SendMessageRequestDto,
 } from './dto';
@@ -8,33 +10,40 @@ import { PrivateChat, PrivateMessage } from './entities';
 import {
   BadRequestException,
   Injectable,
-  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { WsException } from '@nestjs/websockets';
-import { PaginationParams } from 'src/common/decorators';
-import { MetaDto, ResponseFactory } from 'src/common/dto';
+import {
+  CursorPaginationRequestQuery,
+  CursorPaginationResponseMetaDto,
+  ResponseFactory,
+} from 'src/common/dto';
 import { User } from 'src/users/entities';
-import { DataSource, In, IsNull, Not, QueryFailedError } from 'typeorm';
+import { DataSource, In, IsNull, Not } from 'typeorm';
 
 @Injectable()
 export class ChatsService {
   constructor(private readonly dataSource: DataSource) {}
 
-  differentiateUser(user1: User, user2: User, currentUserId: string) {
-    if (user1.id === currentUserId) {
+  getCurrentOtherUserId(
+    currentUserId: string,
+    randomUserId1: string,
+    randomUserId2: string,
+  ) {
+    if (randomUserId1 === currentUserId) {
       return {
-        currentUser: user1,
-        otherUser: user2,
+        currentUserId,
+        otherUserId: randomUserId2,
       };
     }
 
     return {
-      currentUser: user2,
-      otherUser: user1,
+      currentUserId,
+      otherUserId: randomUserId1,
     };
   }
 
-  differentiateUserId(randomUserId1: string, randomUserId2: string) {
+  getUser1User2Id(randomUserId1: string, randomUserId2: string) {
     if (randomUserId1 < randomUserId2) {
       return {
         user1Id: randomUserId1,
@@ -57,6 +66,7 @@ export class ChatsService {
       currentUserId,
       body.chatId,
     );
+
     if (!isAuthorized) {
       throw new WsException(
         ResponseFactory.createErrorResponse('Unauthorized access'),
@@ -69,12 +79,9 @@ export class ChatsService {
 
     const newMessage = await privateMessageRepository.save({
       content: body.message,
-      privateChat: { id: privateChat.id },
-      sender: { id: currentUserId },
+      senderId: currentUserId,
+      privateChatId: privateChat.id,
     });
-
-    newMessage.privateChat = privateChat;
-    privateChat.latestMessage = newMessage;
 
     return { newMessage, privateChat };
   }
@@ -82,10 +89,12 @@ export class ChatsService {
   async editMessage(
     body: EditMessageRequestDto,
     currentUserId: string,
-  ): Promise<{ editedMessage: PrivateMessage; privateChat: PrivateChat }> {
+  ): Promise<{ editedMessage: PrivateMessage }> {
     // Check if user is authorized
-    const { isAuthorized, privateMessage, privateChat } =
-      await this.canUserAccessMessage(currentUserId, body.messageId);
+    const { isAuthorized, privateMessage } = await this.canUserAccessMessage(
+      currentUserId,
+      body.messageId,
+    );
     if (!isAuthorized) {
       throw new WsException(
         ResponseFactory.createErrorResponse('Unauthorized access'),
@@ -100,18 +109,19 @@ export class ChatsService {
     privateMessage.editedAt = new Date();
 
     const editedMessage = await privateMessageRepository.save(privateMessage);
-    editedMessage.privateChat = privateChat;
 
-    return { editedMessage, privateChat };
+    return { editedMessage };
   }
 
   async deleteMessage(
     body: DeleteMessageRequestDto,
     currentUserId: string,
-  ): Promise<{ deletedMessage: PrivateMessage; privateChat: PrivateChat }> {
+  ): Promise<{ deletedMessage: PrivateMessage }> {
     // Check if user is authorized
-    const { isAuthorized, privateMessage, privateChat } =
-      await this.canUserAccessMessage(currentUserId, body.messageId);
+    const { isAuthorized, privateMessage } = await this.canUserAccessMessage(
+      currentUserId,
+      body.messageId,
+    );
     if (!isAuthorized) {
       throw new WsException(
         ResponseFactory.createErrorResponse('Unauthorized access'),
@@ -127,7 +137,6 @@ export class ChatsService {
 
     return {
       deletedMessage,
-      privateChat,
     };
   }
 
@@ -137,6 +146,7 @@ export class ChatsService {
       currentUserId,
       body.chatId,
     );
+
     if (!isAuthorized) {
       throw new WsException(
         ResponseFactory.createErrorResponse('Unauthorized access'),
@@ -145,20 +155,24 @@ export class ChatsService {
 
     const privateMessageRepository =
       this.dataSource.getRepository(PrivateMessage);
-    const privateMessages = await privateMessageRepository.find({
+
+    // Update read_at
+    const unreadPrivateMessages = await privateMessageRepository.find({
       where: {
-        privateChat: { id: body.chatId },
-        sender: { id: Not(currentUserId) },
+        privateChatId: body.chatId,
+        senderId: Not(currentUserId),
+        readAt: IsNull(),
       },
+      withDeleted: true,
     });
 
-    const updatedMessages = privateMessages.map((privateMessage) => {
-      privateMessage.readAt = new Date();
-      return privateMessage;
+    unreadPrivateMessages.forEach((unreadPrivateMessage) => {
+      unreadPrivateMessage.readAt = new Date();
     });
 
-    const updatedPrivateMessages =
-      await privateMessageRepository.save(updatedMessages);
+    const updatedPrivateMessages = await privateMessageRepository.save(
+      unreadPrivateMessages,
+    );
 
     return {
       readMessages: updatedPrivateMessages,
@@ -173,29 +187,48 @@ export class ChatsService {
     | {
         isAuthorized: true;
         privateMessage: PrivateMessage;
-        privateChat: PrivateChat;
       }
-    | { isAuthorized: false; privateMessage: null; privateChat: null }
+    | { isAuthorized: false; privateMessage: null }
   > {
-    const { isAuthorized, privateMessages } =
-      await this.canUserAccessPrivateMessages(currentUserId, [messageId]);
+    const privateMessageRepository =
+      this.dataSource.getRepository(PrivateMessage);
 
-    if (!isAuthorized) {
+    try {
+      const privateMessage = await privateMessageRepository.findOne({
+        where: [
+          {
+            id: messageId,
+            senderId: currentUserId, // only sender can mutate message
+            deletedAt: IsNull(), // cannot mutate deleted message
+            privateChat: {
+              user1Id: currentUserId,
+            },
+          },
+          {
+            id: messageId,
+            senderId: currentUserId, // only sender can mutate message
+            deletedAt: IsNull(), // cannot mutate deleted message
+            privateChat: {
+              user2Id: currentUserId,
+            },
+          },
+        ],
+      });
+
+      if (!privateMessage) {
+        return {
+          isAuthorized: false,
+          privateMessage: null,
+        };
+      }
+
       return {
-        isAuthorized: false,
-        privateMessage: null,
-        privateChat: null,
+        isAuthorized: true,
+        privateMessage,
       };
+    } catch (error) {
+      throw new WsException('Failed to check message access: ' + error.message);
     }
-
-    const privateMessage = privateMessages[0];
-    const privateChat = privateMessage.privateChat;
-
-    return {
-      isAuthorized: true,
-      privateMessage,
-      privateChat,
-    };
   }
 
   async canUserAccessPrivateChat(
@@ -208,24 +241,38 @@ export class ChatsService {
       }
     | { isAuthorized: false; privateChat: null }
   > {
-    const { isAuthorized, privateChats } = await this.canUserAccessPrivateChats(
-      currentUserId,
-      [privateChatId],
-    );
+    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
 
-    if (!isAuthorized) {
+    try {
+      const privateChat = await privateChatRepository.findOne({
+        where: [
+          {
+            id: privateChatId,
+            user1Id: currentUserId,
+          },
+          {
+            id: privateChatId,
+            user2Id: currentUserId,
+          },
+        ],
+      });
+
+      if (!privateChat) {
+        return {
+          isAuthorized: false,
+          privateChat: null,
+        };
+      }
+
       return {
-        isAuthorized: false,
-        privateChat: null,
+        isAuthorized: true,
+        privateChat,
       };
+    } catch (error) {
+      throw new WsException(
+        'Failed to check private chat access: ' + error.message,
+      );
     }
-
-    const privateChat = privateChats[0];
-
-    return {
-      isAuthorized: true,
-      privateChat: privateChat,
-    };
   }
 
   async canUserAccessPrivateChats(
@@ -242,15 +289,14 @@ export class ChatsService {
         where: [
           {
             id: In(privateChatIds), // And
-            user1: { id: currentUserId },
+            user1Id: currentUserId,
           },
           // Or
           {
             id: In(privateChatIds), // And
-            user2: { id: currentUserId },
+            user2Id: currentUserId,
           },
         ],
-        relations: ['user1', 'user2'],
       });
 
       const isAuthorized = privateChats.length === privateChatIds.length;
@@ -273,166 +319,150 @@ export class ChatsService {
     }
   }
 
-  async canUserAccessPrivateMessages(
-    currentUserId: string,
-    privateMessageIds: string[],
-  ): Promise<
-    | {
-        isAuthorized: true;
-        privateMessages: PrivateMessage[];
-      }
-    | {
-        isAuthorized: false;
-        privateMessages: null;
-      }
-  > {
-    const privateMessageRepository =
-      this.dataSource.getRepository(PrivateMessage);
-
-    try {
-      const privateMessages = await privateMessageRepository.find({
-        where: [
-          {
-            id: In(privateMessageIds),
-            privateChat: {
-              user1: { id: currentUserId },
-            },
-          },
-          {
-            id: In(privateMessageIds),
-            privateChat: {
-              user2: { id: currentUserId },
-            },
-          },
-        ],
-        relations: ['privateChat', 'sender'],
-        withDeleted: true,
-      });
-
-      const isAuthorized = privateMessages.length === privateMessageIds.length;
-
-      // Check if some of the messages are not found or user is not part of the chat
-      if (!isAuthorized) {
-        return {
-          isAuthorized,
-          privateMessages: null,
-        };
-      }
-
-      return {
-        isAuthorized,
-        privateMessages,
-      };
-    } catch (error) {
-      throw new WsException(
-        'Failed to check private message access: ' + error.message,
-      );
-    }
-  }
-
-  async getPrivateChatUnreadCount(chatId: string, currentUserId: string) {
-    const privateMessageRepository =
-      this.dataSource.getRepository(PrivateMessage);
-
-    const unreadCount = await privateMessageRepository.count({
-      where: {
-        privateChat: { id: chatId },
-        sender: { id: Not(currentUserId) },
-        readAt: IsNull(),
-      },
-    });
-
-    return unreadCount;
-  }
-
-  async getLatestMessage(chatId: string) {
-    const privateMessageRepository =
-      this.dataSource.getRepository(PrivateMessage);
-
-    const latestMessage = await privateMessageRepository.findOne({
-      where: { privateChat: { id: chatId } },
-      order: { createdAt: 'DESC' },
-    });
-
-    return latestMessage;
-  }
-
-  async getPrivateChatInbox(
+  async getPrivateChatInboxes(
     currentUserId: string,
     title: string | undefined,
-    pagination: PaginationParams,
-  ) {
-    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
+    pagination: CursorPaginationRequestQuery,
+  ): Promise<{
+    privateChatInboxesDto: ChatInboxDto[];
+    metaDto: CursorPaginationResponseMetaDto;
+  }> {
+    const entityManager = this.dataSource.manager;
 
-    let queryBuilder = privateChatRepository
-      .createQueryBuilder('privateChat')
-      .where(
-        '(privateChat.user1_id = :currentUserId OR privateChat.user2_id = :currentUserId)',
-        { currentUserId },
-      )
-      .loadRelationCountAndMap(
-        'privateChat.unreadCount',
-        'privateChat.messages',
-        'unreadCountPrivateMessage',
-        (qb) =>
-          qb.andWhere(
-            '(unreadCountPrivateMessage.read_at IS NULL AND unreadCountPrivateMessage.sender_id <> :currentUserId)',
-            { currentUserId },
-          ),
-      )
-      .leftJoinAndSelect('privateChat.user1', 'user1')
-      .leftJoinAndSelect('privateChat.user2', 'user2')
-      .withDeleted()
-      .innerJoinAndMapOne(
-        // Only privatechat that already have atleast 1 message
-        'privateChat.latestMessage',
-        'privateChat.messages',
-        'latestMessage',
-        'latestMessage.private_chat_id = (SELECT private_chat_id FROM private_messages WHERE private_chat_id = privateChat.id ORDER BY created_at DESC LIMIT 1)',
-      )
-      .orderBy('latestMessage.createdAt', 'DESC');
-
-    if (title) {
-      queryBuilder = queryBuilder.andWhere(
-        '((privateChat.user1_id <> :currentUserId AND user1.username ILIKE :title) OR (privateChat.user2_id <> :currentUserId AND user2.username ILIKE :title))',
-        {
-          currentUserId,
-          title: `%${title}%`,
-        },
-      );
-    }
-
-    const allPrivateChats = await queryBuilder.getMany();
-
-    // Must paginate manually becuase typeorm pagination is broken when using joins 💀
-    // https://github.com/typeorm/typeorm/issues/4742
-    const totalPage = Math.ceil(allPrivateChats.length / pagination.limit);
-    const privateChats = allPrivateChats.slice(
-      (pagination.page - 1) * pagination.limit,
-      pagination.page * pagination.limit,
+    const result = await entityManager.query<any[]>(
+      `
+        WITH inbox_unread_count AS (
+          SELECT
+            pc.id as "chatId",
+            COUNT(*) as "unreadCount"
+          FROM
+            private_chats pc
+            INNER JOIN private_messages pm ON pc.id = pm.private_chat_id
+          WHERE
+            (pc.user1_id = $1::uuid OR pc.user2_id = $1::uuid) AND
+            (pm.read_at IS NULL AND pm.sender_id <> $1::uuid)
+          GROUP BY
+            pc.id
+        ),
+        inbox_sorted AS (
+          SELECT
+            pc.id as "chatId",
+            CASE
+              WHEN u1.id = $1::uuid THEN
+                u2.username
+              ELSE
+                u1.username
+            END as "title",
+            CASE
+              WHEN u1.id = $1::uuid THEN
+                u2.avatar_url
+              ELSE
+                u1.avatar_url
+            END as "avatarUrl",
+            json_build_object(
+              'messageId', pm.id,
+              'content', pm.content,
+              'createdAt', pm.created_at,
+              'deletedAt', pm.deleted_at
+            ) as "latestMessage",
+            ROW_NUMBER() OVER (ORDER BY pm.created_at DESC, pc.id ASC) as "rn"
+          FROM
+            private_chats pc
+            LEFT JOIN users u1 ON pc.user1_id = u1.id
+            LEFT JOIN users u2 ON pc.user2_id = u2.id
+            INNER JOIN private_messages pm ON (pc.id = pm.private_chat_id AND pm.id = (SELECT id FROM private_messages WHERE private_chat_id = pc.id ORDER BY created_at DESC LIMIT 1))
+          WHERE
+            (pc.user1_id = $1::uuid OR pc.user2_id = $1::uuid) AND
+            ($2::varchar IS NULL OR (
+              SELECT
+                CASE WHEN u1.id = $1::uuid THEN
+                  u2.username
+                ELSE
+                  u1.username
+                END
+            ) ILIKE '%' || $2::varchar || '%')
+        ),
+        current_cursor AS (
+          SELECT
+            CASE WHEN $3::uuid IS NULL THEN 
+              1
+            ELSE 
+              COALESCE(
+                (SELECT inbox_sorted.rn FROM inbox_sorted WHERE inbox_sorted."chatId" = $3::uuid),
+                1
+              )
+            END as rn
+        )
+        SELECT
+          inbox_sorted."chatId",
+          inbox_sorted."title",
+          inbox_sorted."avatarUrl",
+          inbox_sorted."latestMessage",
+          COALESCE(inbox_unread_count."unreadCount", 0) as "unreadCount"
+        FROM
+          inbox_sorted
+          LEFT JOIN inbox_unread_count ON inbox_sorted."chatId" = inbox_unread_count."chatId"
+          LEFT JOIN current_cursor ON true
+        WHERE
+          inbox_sorted.rn >= current_cursor.rn
+        ORDER BY
+          inbox_sorted.rn ASC
+        LIMIT
+          $4::int + 1
+      `,
+      [currentUserId, title, pagination.cursor, pagination.limit],
     );
 
-    const metaDto: MetaDto = {
-      page: pagination.page,
+    // Parse into inbox
+    const privateChatInboxesDto = result.map<ChatInboxDto>((row) => ({
+      chatId: String(row.chatId),
+      title: String(row.title),
+      avatarUrl: row.avatarUrl ? String(row.avatarUrl) : null,
+      unreadCount: Number(row.unreadCount),
+      latestMessage: {
+        messageId: String(row.latestMessage.messageId),
+        content: row.latestMessage.deletedAt
+          ? null
+          : String(row.latestMessage.content),
+        createdAt: new Date(row.latestMessage.createdAt),
+        deletedAt: row.latestMessage.deletedAt
+          ? new Date(row.latestMessage.deletedAt)
+          : null,
+      },
+    }));
+
+    // Slice the result
+    const metaDto: CursorPaginationResponseMetaDto = {
+      cursor: pagination.cursor,
       limit: pagination.limit,
-      totalData: allPrivateChats.length,
-      totalPage,
+      nextCursor: null,
     };
 
+    if (privateChatInboxesDto.length > pagination.limit) {
+      const nextPrivateChatInbox = privateChatInboxesDto.pop();
+      if (nextPrivateChatInbox) {
+        metaDto.nextCursor = nextPrivateChatInbox.chatId;
+      }
+    }
+
     return {
-      privateChats,
+      privateChatInboxesDto,
       metaDto,
     };
   }
 
   // Get privat chat message from latest to oldest
+  // Note: read update is done in the websocket hanlder, not http request
   async getPrivateChatMessage(
     currentUserId: string,
     privateChatId: string,
-    pagination: PaginationParams,
-  ) {
+    pagination: CursorPaginationRequestQuery,
+  ): Promise<{
+    messagesDto: MessageDto[];
+    metaDto: CursorPaginationResponseMetaDto;
+  }> {
     // Check if user is authorized
-    const { isAuthorized, privateChat } = await this.canUserAccessPrivateChat(
+    const { isAuthorized } = await this.canUserAccessPrivateChat(
       currentUserId,
       privateChatId,
     );
@@ -441,39 +471,189 @@ export class ChatsService {
     }
 
     // Get paginated messages
-    const privateMessageRepository =
-      this.dataSource.getRepository(PrivateMessage);
+    const entityManager = this.dataSource.manager;
 
-    const [privateMessages, totalData] =
-      await privateMessageRepository.findAndCount({
-        where: {
-          privateChat: { id: privateChatId },
-        },
-        order: {
-          createdAt: 'DESC',
-        },
-        withDeleted: true,
-        skip: (pagination.page - 1) * pagination.limit,
-        take: pagination.limit,
-        relations: ['sender'],
-      });
+    const result = await entityManager.query<any[]>(
+      `
+        WITH messages_sorted AS (
+          SELECT
+            pm.id as "messageId",
+            pm.private_chat_id as "chatId",
+            pm.content as "content",
+            pm.edited_at as "editedAt",
+            pm.sender_id as "senderId",
+            pm.read_at as "readAt",
+            pm.created_at as "createdAt",
+            pm.deleted_at as "deletedAt",
+            ROW_NUMBER() OVER (ORDER BY pm.created_at DESC, pm.id ASC) as "rn"
+          FROM
+            private_messages pm
+          WHERE
+            pm.private_chat_id = $1::uuid
+        ),
+        current_cursor AS (
+          SELECT
+            CASE WHEN $2::uuid IS NULL THEN 
+              1
+            ELSE 
+              COALESCE(
+                (SELECT messages_sorted.rn FROM messages_sorted WHERE messages_sorted."messageId" = $2::uuid),
+                1
+              )
+            END as rn
+        )
+        SELECT
+          messages_sorted."messageId",
+          messages_sorted."chatId",
+          messages_sorted."content",
+          messages_sorted."editedAt",
+          messages_sorted."senderId",
+          messages_sorted."readAt",
+          messages_sorted."createdAt",
+          messages_sorted."deletedAt"
+        FROM
+          messages_sorted
+          LEFT JOIN current_cursor ON true
+        WHERE
+          messages_sorted.rn >= current_cursor.rn
+        ORDER BY
+          messages_sorted.rn ASC
+        LIMIT
+          $3::int + 1
+      `,
+      [privateChatId, pagination.cursor, pagination.limit],
+    );
 
-    privateMessages.forEach((message) => {
-      message.privateChat = privateChat;
-    });
+    // Map
+    const messagesDto = result.map<MessageDto>((row) => ({
+      messageId: String(row.messageId),
+      chatId: String(row.chatId),
+      content: row.content ? String(row.content) : null,
+      editedAt: row.editedAt ? new Date(row.editedAt) : null,
+      senderId: String(row.senderId),
+      readAt: row.readAt ? new Date(row.readAt) : null,
+      createdAt: new Date(row.createdAt),
+      deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+    }));
 
-    const totalPage = Math.ceil(totalData / pagination.limit);
-
-    const metaDto: MetaDto = {
-      page: pagination.page,
+    const metaDto: CursorPaginationResponseMetaDto = {
+      cursor: pagination.cursor,
       limit: pagination.limit,
-      totalData,
-      totalPage,
+      nextCursor: null,
     };
 
-    // Note: read update is done in the websocket hanlder, not http request
+    if (messagesDto.length > pagination.limit) {
+      const nextMessage = messagesDto.pop();
+      if (nextMessage) {
+        metaDto.nextCursor = nextMessage.messageId;
+      }
+    }
 
-    return { privateChat, privateMessages, metaDto };
+    return {
+      messagesDto,
+      metaDto,
+    };
+  }
+
+  async getPrivateChatInbox(
+    currentUserId: string,
+    targetUserId: string,
+  ): Promise<ChatInboxDto | null> {
+    const entityManager = this.dataSource.manager;
+
+    // Find if chat exists between currentUserId & targetUserId
+    const [result] = await entityManager.query<any>(
+      `
+        WITH chat_exists AS (
+          SELECT
+            pc.id as "chatId"
+          FROM
+            private_chats pc
+          WHERE
+            (pc.user1_id = $1::uuid AND pc.user2_id = $2::uuid) OR
+            (pc.user1_id = $2::uuid AND pc.user2_id = $1::uuid)
+        )
+        SELECT
+          CASE WHEN chat_exists."chatId" IS NULL THEN
+            NULL
+          ELSE (
+            SELECT
+              json_build_object(
+                'chatId', pc.id,
+                'title', (
+                  CASE WHEN u1.id = $1::uuid THEN
+                    u2.username
+                  ELSE
+                    u1.username
+                  END
+                ),
+                'avatarUrl', (
+                  CASE WHEN u1.id = $1::uuid THEN
+                    u2.avatar_url
+                  ELSE
+                    u1.avatar_url
+                  END
+                ),
+                'unreadCount', COALESCE(unread_count."unreadCount", 0),
+                'latestMessage', (
+                  json_build_object(
+                    'messageId', pm.id,
+                    'content', pm.content,
+                    'createdAt', pm.created_at,
+                    'deletedAt', pm.deleted_at
+                  )
+                )
+              )
+            FROM
+              private_chats pc
+              LEFT JOIN users u1 ON pc.user1_id = u1.id
+              LEFT JOIN users u2 ON pc.user2_id = u2.id
+              INNER JOIN private_messages pm ON pc.id = pm.private_chat_id AND pm.id = (SELECT id FROM private_messages WHERE private_chat_id = pc.id ORDER BY created_at DESC LIMIT 1)
+              LEFT JOIN (
+                SELECT
+                  pm.private_chat_id as "chatId",
+                  COUNT(*) as "unreadCount"
+                FROM
+                  private_messages pm
+                WHERE
+                  pm.private_chat_id = chat_exists."chatId" AND
+                  pm.sender_id = $2::uuid AND
+                  pm.read_at IS NULL
+                GROUP BY
+                  pm.private_chat_id
+              ) as unread_count ON pc.id = unread_count."chatId"
+            WHERE
+              pc.id = chat_exists."chatId"
+          ) END as "chatInbox"
+        FROM
+          chat_exists
+      `,
+      [currentUserId, targetUserId],
+    );
+
+    if (!result) return null;
+
+    const { chatInbox: rawChatInbox } = result;
+
+    // Parse chat inbox
+    const chatInboxDto: ChatInboxDto = {
+      chatId: String(rawChatInbox.chatId),
+      title: String(rawChatInbox.title),
+      avatarUrl: rawChatInbox.avatarUrl ? String(rawChatInbox.avatarUrl) : null,
+      unreadCount: Number(rawChatInbox.unreadCount),
+      latestMessage: {
+        messageId: String(rawChatInbox.latestMessage.messageId),
+        content: rawChatInbox.latestMessage.deletedAt
+          ? null
+          : String(rawChatInbox.latestMessage.content),
+        createdAt: new Date(rawChatInbox.latestMessage.createdAt),
+        deletedAt: rawChatInbox.latestMessage.deletedAt
+          ? new Date(rawChatInbox.latestMessage.deletedAt)
+          : null,
+      },
+    };
+
+    return chatInboxDto;
   }
 
   /**
@@ -484,74 +664,48 @@ export class ChatsService {
    * @param targetUserId
    * @returns
    */
-  async getExistingOrCreateNewChat(
+  async createNewPrivateChat(
     currentUserId: string,
     targetUserId: string,
-  ) {
+  ): Promise<ChatInboxDto> {
     if (currentUserId === targetUserId) {
       throw new BadRequestException(
         ResponseFactory.createErrorResponse('Cannot chat with yourself'),
       );
     }
 
-    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
-
-    const { user1Id, user2Id } = this.differentiateUserId(
+    const { user1Id, user2Id } = this.getUser1User2Id(
       currentUserId,
       targetUserId,
     );
 
-    // Check if chat already exists
-    try {
-      const existingPrivateChat = await privateChatRepository.findOne({
-        where: { user1: { id: user1Id }, user2: { id: user2Id } },
-        relations: ['user1', 'user2'],
-      });
-
-      if (existingPrivateChat) {
-        // Get last message and unread count
-        const [latestMessage, unreadCount] = await Promise.all([
-          this.getLatestMessage(existingPrivateChat.id),
-          this.getPrivateChatUnreadCount(existingPrivateChat.id, currentUserId),
-        ]);
-
-        existingPrivateChat.latestMessage = latestMessage;
-        existingPrivateChat.unreadCount = unreadCount;
-
-        return { newOrExistingChat: existingPrivateChat };
-      }
-    } catch (error) {
-      // Other errors
-      throw new InternalServerErrorException(
-        ResponseFactory.createErrorResponse('Failed to get chat data'),
+    // Validate and get target user data (for chat inbox) (current user already validated from auth)
+    const userRepository = this.dataSource.getRepository(User);
+    const targetUser = await userRepository.findOneBy({
+      id: targetUserId,
+    });
+    if (!targetUser) {
+      throw new NotFoundException(
+        ResponseFactory.createErrorResponse("Target user doesn't exist"),
       );
     }
 
-    // Chat doesnt exists
-    try {
-      const newPrivateChat = await privateChatRepository.save({
-        user1: { id: user1Id },
-        user2: { id: user2Id },
-      });
-      newPrivateChat.messages = [];
-      newPrivateChat.unreadCount = 0;
+    // Create new chat
+    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
+    const newPrivateChat = await privateChatRepository.save({
+      user1Id: user1Id,
+      user2Id: user2Id,
+    });
 
-      return { newOrExistingChat: newPrivateChat };
-    } catch (error) {
-      // Foreign key constraint error
-      if (
-        error instanceof QueryFailedError &&
-        error.driverError.code === '23503'
-      ) {
-        throw new BadRequestException(
-          ResponseFactory.createErrorResponse('User not found'),
-        );
-      }
+    // Create new chat inbox
+    const chatInboxDto: ChatInboxDto = {
+      chatId: newPrivateChat.id,
+      title: targetUser.username,
+      avatarUrl: targetUser.avatarUrl,
+      latestMessage: null,
+      unreadCount: 0,
+    };
 
-      // Other errors
-      throw new InternalServerErrorException(
-        ResponseFactory.createErrorResponse('Failed to create chat data'),
-      );
-    }
+    return chatInboxDto;
   }
 }

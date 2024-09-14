@@ -21,13 +21,8 @@ import { FormDataRequest } from 'nestjs-form-data';
 import { HttpJwtGuard } from 'src/auth/guards';
 import { UserPayload } from 'src/auth/interfaces';
 import { ChatsService } from 'src/chats/chats.service';
-import { ChatResponseFactory } from 'src/chats/dto';
-import {
-  HttpReqUser,
-  Pagination,
-  PaginationParams,
-} from 'src/common/decorators';
-import { ResponseFactory } from 'src/common/dto';
+import { CursorPagination, HttpReqUser } from 'src/common/decorators';
+import { CursorPaginationRequestQuery, ResponseFactory } from 'src/common/dto';
 
 @Controller('users')
 @UseGuards(HttpJwtGuard)
@@ -42,10 +37,11 @@ export class UsersController {
   async findAll(
     @Query('username') username: string | undefined,
     @HttpReqUser() reqUser: UserPayload,
-    @Pagination({ defaultLimit: 15 }) pagination: PaginationParams,
+    @CursorPagination({ defaultLimit: 15 })
+    pagination: CursorPaginationRequestQuery,
   ) {
     // Find users
-    const { users, meta } =
+    const { users, metaDto } =
       await this.usersService.findMatchingUserWithoutCurrentUser(
         username,
         reqUser.userId,
@@ -56,10 +52,10 @@ export class UsersController {
     const usersDto = UserResponseFactory.createUserDtoList(users);
 
     // Return response
-    return ResponseFactory.createSuccessPaginatedResponse(
+    return ResponseFactory.createSuccessCursorPaginatedResponse(
       'Get users success',
       usersDto,
-      meta,
+      metaDto,
     );
   }
 
@@ -82,7 +78,7 @@ export class UsersController {
     };
 
     // Return response
-    return ResponseFactory.createSuccessResponse(
+    return ResponseFactory.createSuccessResponseWithData(
       'Upload profile picture success',
       responseData,
     );
@@ -104,7 +100,7 @@ export class UsersController {
     const userDto = UserResponseFactory.createUserDto(updatedUser);
 
     // Return response
-    return ResponseFactory.createSuccessResponse(
+    return ResponseFactory.createSuccessResponseWithData(
       'Update profile data success',
       userDto,
     );
@@ -120,7 +116,7 @@ export class UsersController {
     const userDto = UserResponseFactory.createUserDto(user);
 
     // Return response
-    return ResponseFactory.createSuccessResponse(
+    return ResponseFactory.createSuccessResponseWithData(
       'Get profile data success',
       userDto,
     );
@@ -133,24 +129,34 @@ export class UsersController {
     @Param('id', ParseUUIDPipe) targetUserId: string,
     @HttpReqUser() reqUser: UserPayload,
   ) {
-    const { newOrExistingChat } =
-      await this.chatService.getExistingOrCreateNewChat(
-        reqUser.userId,
-        targetUserId,
+    // Find existing chat
+    const chatInboxDto = await this.chatService.getPrivateChatInbox(
+      reqUser.userId,
+      targetUserId,
+    );
+
+    if (chatInboxDto) {
+      const response = ResponseFactory.createSuccessResponseWithData(
+        'Get existing chat successfully',
+        chatInboxDto,
       );
 
-    const chatInboxResponse = ChatResponseFactory.createPrivateChatInbox(
-      newOrExistingChat,
+      return response;
+    }
+
+    // Create new chat if not found
+    const newChatInbox = await this.chatService.createNewPrivateChat(
       reqUser.userId,
+      targetUserId,
     );
 
     // Map response
-    const responseData = ResponseFactory.createSuccessResponse(
-      'Get existing or created new chat successfully',
-      chatInboxResponse,
+    const response = ResponseFactory.createSuccessResponseWithData(
+      'Created new chat successfully',
+      newChatInbox,
     );
 
     // Return response
-    return responseData;
+    return response;
   }
 }

@@ -9,8 +9,11 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { BucketService } from 'src/bucket/bucket.service';
-import { PaginationParams } from 'src/common/decorators';
-import { MetaDto, ResponseFactory } from 'src/common/dto';
+import {
+  CursorPaginationRequestQuery,
+  CursorPaginationResponseMetaDto,
+  ResponseFactory,
+} from 'src/common/dto';
 import { DataSource, QueryFailedError } from 'typeorm';
 
 @Injectable()
@@ -23,40 +26,84 @@ export class UsersService {
   async findMatchingUserWithoutCurrentUser(
     usernameQuery: string | undefined,
     currentUserId: string,
-    pagination: PaginationParams,
+    pagination: CursorPaginationRequestQuery,
   ) {
+    const entityManager = this.dataSource.manager;
+
+    const result = await entityManager.query<any[]>(
+      `
+        WITH users_sorted AS (
+          SELECT
+            u.id as "id",
+            u.username as "username",
+            u.name as "name",
+            u.avatar_url as "avatarUrl",
+            u.about as "about",
+            ROW_NUMBER() OVER (ORDER BY u.username ASC) as "rn"
+          FROM users u
+          WHERE 
+            (u.id <> $1::uuid) AND
+            ($2::varchar IS NULL OR u.username ILIKE '%' || $2::varchar || '%') 
+        ),
+        current_cursor AS (
+          SELECT
+            CASE WHEN $3::uuid IS NULL THEN
+              1
+            ELSE
+              COALESCE(
+                (SELECT users_sorted.rn FROM users_sorted WHERE users_sorted.id = $3::uuid),
+                1
+              )
+            END as rn
+        )
+        SELECT
+          users_sorted."id",
+          users_sorted."username",
+          users_sorted."name",
+          users_sorted."avatarUrl",
+          users_sorted."about"
+        FROM
+          users_sorted
+          LEFT JOIN current_cursor ON true
+        WHERE
+          users_sorted.rn >= current_cursor.rn
+        ORDER BY
+          users_sorted.rn ASC
+        LIMIT
+          $4::int + 1
+      `,
+      [currentUserId, usernameQuery, pagination.cursor, pagination.limit],
+    );
+
+    // Map to user entity
     const userRepository = this.dataSource.getRepository(User);
-    let queryBuilder = userRepository
-      .createQueryBuilder('user')
-      .where('(user.id <> :currentUserId)', {
-        currentUserId,
-      });
+    const users = result.map((row) =>
+      userRepository.create({
+        id: row.id,
+        username: row.username,
+        name: row.name,
+        avatarUrl: row.avatarUrl,
+        about: row.about,
+      }),
+    );
 
-    // Apply username filter
-    if (usernameQuery) {
-      queryBuilder = queryBuilder.andWhere('(user.username ILIKE :username)', {
-        username: `%${usernameQuery}%`,
-      });
-    }
-
-    // Count total
-    const totalData = await queryBuilder.getCount();
-    const totalPage = Math.ceil(totalData / pagination.limit);
-    queryBuilder = queryBuilder
-      .skip((pagination.page - 1) * pagination.limit)
-      .take(pagination.limit);
-
-    // Execute query
-    const users = await queryBuilder.getMany();
-
-    const meta: MetaDto = {
-      page: pagination.page,
+    const metaDto: CursorPaginationResponseMetaDto = {
+      cursor: pagination.cursor,
       limit: pagination.limit,
-      totalData,
-      totalPage,
+      nextCursor: null,
     };
 
-    return { users, meta };
+    if (users.length > pagination.limit) {
+      const nextUser = users.pop();
+      if (nextUser) {
+        metaDto.nextCursor = nextUser.id;
+      }
+    }
+
+    return {
+      users,
+      metaDto,
+    };
   }
 
   async uploadProfilePicture(
