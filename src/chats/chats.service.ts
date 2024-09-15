@@ -608,7 +608,7 @@ export class ChatsService {
               private_chats pc
               LEFT JOIN users u1 ON pc.user1_id = u1.id
               LEFT JOIN users u2 ON pc.user2_id = u2.id
-              INNER JOIN private_messages pm ON pc.id = pm.private_chat_id AND pm.id = (SELECT id FROM private_messages WHERE private_chat_id = pc.id ORDER BY created_at DESC LIMIT 1)
+              LEFT JOIN private_messages pm ON pc.id = pm.private_chat_id AND pm.id = (SELECT id FROM private_messages WHERE private_chat_id = pc.id ORDER BY created_at DESC LIMIT 1)
               LEFT JOIN (
                 SELECT
                   pm.private_chat_id as "chatId",
