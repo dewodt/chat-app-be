@@ -5,3 +5,9 @@ export class SendTypingRequestDto {
   @IsUUID(4, { message: 'chatId must be a valid UUID' })
   chatId: string;
 }
+
+export class SendStopTypingRequestDto {
+  @IsNotEmpty({ message: 'chatId is required' })
+  @IsUUID(4, { message: 'chatId must be a valid UUID' })
+  chatId: string;
+}

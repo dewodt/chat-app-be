@@ -1,9 +1,9 @@
-export enum ChatType {
-  PRIVATE = 'PRIVATE',
-  GROUP = 'GROUP',
+export enum STATUS {
+  ONLINE = 'ONLINE',
+  OFFLINE = 'OFFLINE',
 }
 
-export enum GroupParticipantRole {
-  ADMIN = 'ADMIN',
-  MEMBER = 'MEMBER',
+export enum TYPING {
+  TYPING = 'TYPING',
+  NOT_TYPING = 'NOT_TYPING',
 }

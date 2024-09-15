@@ -180,6 +180,28 @@ export class ChatsService {
     };
   }
 
+  async getCurrentUserOnlineRoomIds(
+    currentUserIds: string,
+    onlineUserIds: string[],
+  ): Promise<string[]> {
+    const privateChatRepository = this.dataSource.getRepository(PrivateChat);
+
+    const privateChats = await privateChatRepository.find({
+      where: [
+        {
+          user1Id: currentUserIds,
+          user2Id: In(onlineUserIds),
+        },
+        {
+          user1Id: In(onlineUserIds),
+          user2Id: currentUserIds,
+        },
+      ],
+    });
+
+    return privateChats.map((privateChat) => privateChat.id);
+  }
+
   async canUserAccessMessage(
     currentUserId: string,
     messageId: string,

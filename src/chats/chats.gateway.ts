@@ -3,10 +3,14 @@ import {
   ChatResponseFactory,
   DeleteMessageRequestDto,
   EditMessageRequestDto,
-  JoinChatRequestDto,
   SendMessageRequestDto,
   ReadChatRequestDto,
+  JoinChatRoomsRequestDto,
+  SendStopTypingRequestDto,
+  SendTypingRequestDto,
 } from './dto';
+import { GetStatusRequestDto, GetStatusResponseDto } from './dto/get-status';
+import { STATUS } from './entities';
 import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
 import {
   ConnectedSocket,
@@ -82,12 +86,27 @@ export class ChatsGateway implements NestGateway {
       this.userSocketsMap.set(userPayload.userId, new Set([socket.id]));
     }
 
+    // Notify online users
+    const onlineUserIds = Array.from(new Set(this.userSocketsMap.keys()));
+    const currentUserOnlineRooms =
+      await this.chatService.getCurrentUserOnlineRoomIds(
+        userPayload.userId,
+        onlineUserIds,
+      );
+    const response = ResponseFactory.createSuccessResponseWithData(
+      'User is now online',
+      {
+        userId: userPayload.userId,
+      },
+    );
+    socket.to(currentUserOnlineRooms).emit('userOnline', response);
+
     console.log(
       `WS Client Connected (UserID: ${userPayload.userId} | SocketID: ${socket.id})`,
     );
   }
 
-  handleDisconnect(socket: Socket) {
+  async handleDisconnect(socket: Socket) {
     const reqUser = socket.data.user as UserPayload;
 
     const userSockets = this.userSocketsMap.get(reqUser.userId);
@@ -99,6 +118,21 @@ export class ChatsGateway implements NestGateway {
       }
     }
 
+    // Notify offline to other users
+    const onlineUserIds = Array.from(new Set(this.userSocketsMap.keys()));
+    const currentUserOnlineRooms =
+      await this.chatService.getCurrentUserOnlineRoomIds(
+        reqUser.userId,
+        onlineUserIds,
+      );
+    const response = ResponseFactory.createSuccessResponseWithData(
+      'User is now offline',
+      {
+        userId: reqUser.userId,
+      },
+    );
+    socket.to(currentUserOnlineRooms).emit('userOffline', response);
+
     console.log(
       `WS Client Disconnected (UserID: ${reqUser.userId} | SocketID: ${socket.id})`,
     );
@@ -107,7 +141,7 @@ export class ChatsGateway implements NestGateway {
   @SubscribeMessage('joinChatRooms')
   async handleJoinChatRooms(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() body: JoinChatRequestDto,
+    @MessageBody() body: JoinChatRoomsRequestDto,
     @WsReqUser() reqUser: UserPayload,
   ) {
     // Check if user can join chat room
@@ -126,6 +160,48 @@ export class ChatsGateway implements NestGateway {
     socket.join(body.chatIds);
 
     return ResponseFactory.createSuccessResponse('Joined chat room');
+  }
+
+  @SubscribeMessage('getStatus')
+  async handleGetStatus(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: GetStatusRequestDto,
+    @WsReqUser() reqUser: UserPayload,
+  ) {
+    // Check if user can get status
+    const { isAuthorized, privateChat } =
+      await this.chatService.canUserAccessPrivateChat(
+        reqUser.userId,
+        body.chatId,
+      );
+
+    if (!isAuthorized) {
+      throw new WsException(
+        ResponseFactory.createErrorResponse('Unauthorized access'),
+      );
+    }
+
+    const { otherUserId } = this.chatService.getCurrentOtherUserId(
+      reqUser.userId,
+      privateChat.user1Id,
+      privateChat.user2Id,
+    );
+
+    const otherUserSockets = this.userSocketsMap.get(otherUserId);
+    const otherUserStatus = otherUserSockets ? STATUS.ONLINE : STATUS.OFFLINE;
+
+    // Map to response
+    const responseData: GetStatusResponseDto = {
+      chatId: body.chatId,
+      status: otherUserStatus,
+    };
+
+    const response = ResponseFactory.createSuccessResponseWithData(
+      'Status retrieved',
+      responseData,
+    );
+
+    return response;
   }
 
   @SubscribeMessage('sendMessage')
@@ -149,12 +225,12 @@ export class ChatsGateway implements NestGateway {
         privateChat.user2Id,
       );
 
-    // Current user response data
-    const currentUserChatInboxDto = await this.chatService.getPrivateChatInbox(
-      currentUserId,
-      otherUserId,
-    );
+    const [currentUserChatInboxDto, otherUserChatInboxDto] = await Promise.all([
+      this.chatService.getPrivateChatInbox(currentUserId, otherUserId),
+      this.chatService.getPrivateChatInbox(otherUserId, currentUserId),
+    ]);
 
+    // Current user response data
     const currentUserResponse = ResponseFactory.createSuccessResponseWithData(
       'Message sent',
       {
@@ -164,11 +240,6 @@ export class ChatsGateway implements NestGateway {
     );
 
     // Other user response data
-    const otherUserChatInboxDto = await this.chatService.getPrivateChatInbox(
-      otherUserId,
-      currentUserId,
-    );
-
     const otherUserResponse = ResponseFactory.createSuccessResponseWithData(
       'Message received',
       {
@@ -275,7 +346,7 @@ export class ChatsGateway implements NestGateway {
   @SubscribeMessage('sendTyping')
   async handleSendTyping(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() body: any,
+    @MessageBody() body: SendTypingRequestDto,
     @WsReqUser() reqUser: UserPayload,
   ) {
     // Check if user is authorized
@@ -283,20 +354,32 @@ export class ChatsGateway implements NestGateway {
       reqUser.userId,
       body.chatId,
     );
+
     if (!isAuthorized) {
       throw new WsException(
         ResponseFactory.createErrorResponse('Unauthorized access'),
       );
     }
 
-    // Send typing
-    socket.to(body.chatId).emit('typing', { userId: reqUser.userId });
+    // Map response other user
+    const otherUserResponse = ResponseFactory.createSuccessResponseWithData(
+      'User is typing',
+      { chatId: body.chatId, userId: reqUser.userId },
+    );
+
+    socket.to(body.chatId).emit('typing', otherUserResponse);
+
+    // Map response current user
+    const currentUserResponse =
+      ResponseFactory.createSuccessResponse('Typing sent');
+
+    return currentUserResponse;
   }
 
   @SubscribeMessage('sendStopTyping')
   async handleSendStopTyping(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() body: any,
+    @MessageBody() body: SendStopTypingRequestDto,
     @WsReqUser() reqUser: UserPayload,
   ) {
     // Check if user is authorized
@@ -304,14 +387,26 @@ export class ChatsGateway implements NestGateway {
       reqUser.userId,
       body.chatId,
     );
+
     if (!isAuthorized) {
       throw new WsException(
         ResponseFactory.createErrorResponse('Unauthorized access'),
       );
     }
 
-    // Send stop typing
-    socket.to(body.chatId).emit('stopTyping', { userId: reqUser.userId });
+    // Map response other user
+    const otherUserResponse = ResponseFactory.createSuccessResponseWithData(
+      'User stopped typing',
+      { userId: reqUser.userId },
+    );
+
+    socket.to(body.chatId).emit('stopTyping', otherUserResponse);
+
+    // Map response current user
+    const currentUserResponse =
+      ResponseFactory.createSuccessResponse('Stop typing sent');
+
+    return currentUserResponse;
   }
 
   @SubscribeMessage('readChat')
