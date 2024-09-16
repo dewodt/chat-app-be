@@ -1,73 +1,39 @@
 <p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
+<img src="https://chat.dewodt.com/link-preview.png" alt="Chat App" width="500">
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+# 🔭 Description
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+A simple chat application that allows you to chat with your friends.
 
-## Description
+# ⚙️ How To Use
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+To access the app, you can go to: [https://chat.dewodt.com/](https://chat.dewodt.com/)
 
-## Installation
+**Note that the app might return Error 502 Bad Gateway (front-end) or 500 Internal Server Error (back-end) at first because of Railway's sleep feature. Please wait for a couple of seconds.**
 
-```bash
-$ npm install
-```
+# 🛠️ Frameworks/Tools Used
 
-## Running the app
+- [NestJS](https://nestjs.com/) (Backend Framework)
+- [class-transformer](https://github.com/typestack/class-transformer) (Class Utils)
+- [class-validator](https://github.com/typestack/class-validatorbcryp) (Validation Utils with Class)
+- [Typescript](https://www.typescriptlang.org/) (Typesafe for JavaScript)
+- [socket.io](https://socket.io/) (Websocket Abstraction)
+- [TypeORM](https://typeorm.io/) (ORM)
+- [cloudinary](https://cloudinary.com/) (Bucket SaaS)
+- [bcrypt](https://github.com/kelektiv/node.bcrypt.js) (Password Hashing)
+- [PostgreSQL](https://www.postgresql.org/) (SQL Database)
+- [faker-js](https://fakerjs.dev/) v8.4.1 (Generate Data)
+- [Docker](https://www.docker.com/) (Container)
+- [Railway](https://railway.app/) (Deployment)
 
-```bash
-# development
-$ npm run start
+# ✨ Cool Features
 
-# watch mode
-$ npm run start:dev
+- Enjoy a sleek user interface featuring both light and dark mode options for comfortable viewing.
+- Personalize your profile to reflect your unique style and preferences.
+- Engage in real-time conversations with all registered users on the platform.
+- Manage your messages effortlessly with options to edit, delete, or send new ones.
 
-# production mode
-$ npm run start:prod
-```
+# 📩 Feedback
 
-## Test
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](LICENSE).
+If you have any feedback, suggestion, inquieries, or anything you want to tell me, please feel free to contact me at [this email](mailto:dewantorotriatmojo@gmail.com).
