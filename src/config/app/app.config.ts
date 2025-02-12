@@ -20,11 +20,13 @@ export const appConfig = (): Config => ({
     url: process.env.SERVER_URL!,
   },
   database: {
-    host: process.env.DB_HOST!,
-    port: parseInt(process.env.DB_PORT!, 10),
-    username: process.env.DB_USERNAME!,
-    password: process.env.DB_PASSWORD!,
-    database: process.env.DB_NAME!,
+    url: process.env.DB_URL!,
+    // host: process.env.DB_HOST!,
+    // port: parseInt(process.env.DB_PORT!, 10),
+    // username: process.env.DB_USERNAME!,
+    // password: process.env.DB_PASSWORD!,
+    // database: process.env.DB_NAME!,
+    // sslmode: process.env.DB_SSLMODE!,
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME!,

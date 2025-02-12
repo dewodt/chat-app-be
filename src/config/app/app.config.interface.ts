@@ -17,11 +17,13 @@ export interface Config {
     url: string;
   };
   database: {
-    host: string;
-    port: number;
-    username: string;
-    password: string;
-    database: string;
+    url: string;
+    // host: string;
+    // port: number;
+    // username: string;
+    // password: string;
+    // database: string;
+    // sslmode: string;
   };
   cloudinary: {
     cloudName: string;

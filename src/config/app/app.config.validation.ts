@@ -54,24 +54,31 @@ class EnvironmentVariables {
 
   @IsString()
   @IsNotEmpty()
-  DB_HOST: string;
+  DB_URL: string;
 
-  @IsNumber()
-  @Min(0)
-  @Max(65535)
-  DB_PORT: number;
+  // @IsString()
+  // @IsNotEmpty()
+  // DB_HOST: string;
 
-  @IsString()
-  @IsNotEmpty()
-  DB_NAME: string;
+  // @IsNumber()
+  // @Min(0)
+  // @Max(65535)
+  // DB_PORT: number;
 
-  @IsString()
-  @IsNotEmpty()
-  DB_USERNAME: string;
+  // @IsString()
+  // @IsNotEmpty()
+  // DB_NAME: string;
 
-  @IsString()
-  @IsNotEmpty()
-  DB_PASSWORD: string;
+  // @IsString()
+  // @IsNotEmpty()
+  // DB_USERNAME: string;
+
+  // @IsString()
+  // @IsNotEmpty()
+  // DB_PASSWORD: string;
+
+  // @IsString()
+  // DB_SSLMODE: string;
 
   @IsString()
   @IsNotEmpty()
